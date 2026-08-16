@@ -165,7 +165,7 @@ export function ClientDetails({ id }: { id: string }) {
           </div>
         }
       />
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <ClientMetric icon={UserCheck} label="Відвідано" value={present} />
         <ClientMetric icon={UserX} label="Пропущено" value={absent} />
         <ClientMetric
