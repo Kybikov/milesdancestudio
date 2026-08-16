@@ -49,6 +49,9 @@ async function main() {
     });
   }
 
+  const adminRoleExisted = Boolean(
+    await db.role.findUnique({ where: { code: "ADMIN" }, select: { id: true } }),
+  );
   const ownerRole = await db.role.upsert({
     where: { code: "OWNER" },
     update: { name: "Власниця", isSystem: true },
@@ -71,16 +74,16 @@ async function main() {
   });
 
   const permissions = await db.permission.findMany();
-  await db.rolePermission.deleteMany({
-    where: { roleId: { in: [ownerRole.id, adminRole.id] } },
-  });
   await db.rolePermission.createMany({
-    data: [
-      ...permissions.map((permission) => ({
-        roleId: ownerRole.id,
-        permissionId: permission.id,
-      })),
-      ...permissions
+    data: permissions.map((permission) => ({
+      roleId: ownerRole.id,
+      permissionId: permission.id,
+    })),
+    skipDuplicates: true,
+  });
+  if (!adminRoleExisted)
+    await db.rolePermission.createMany({
+      data: permissions
         .filter((permission) =>
           adminPermissionCodes.includes(permission.code as never),
         )
@@ -88,9 +91,8 @@ async function main() {
           roleId: adminRole.id,
           permissionId: permission.id,
         })),
-    ],
-    skipDuplicates: true,
-  });
+      skipDuplicates: true,
+    });
 
   const owner = await db.user.upsert({
     where: { email: env.OWNER_EMAIL.toLowerCase() },

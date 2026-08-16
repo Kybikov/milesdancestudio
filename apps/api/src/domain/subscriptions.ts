@@ -19,6 +19,24 @@ export function derivedSubscriptionStatus(input: {
   return "ACTIVE";
 }
 
+export function restoredSubscriptionState(input: {
+  remainingLessons: number;
+  endDate: Date;
+  now?: Date;
+}) {
+  const remainingLessons = input.remainingLessons + 1;
+  const status = derivedSubscriptionStatus({
+    remainingLessons,
+    endDate: input.endDate,
+    now: input.now,
+  });
+  return {
+    remainingLessons,
+    status,
+    burnedLessons: status === "EXPIRED" ? remainingLessons : 0,
+  };
+}
+
 export function subscriptionMatches(
   subscription: {
     teacherIds: string[];

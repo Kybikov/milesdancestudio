@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   derivedSubscriptionStatus,
   inclusiveEndDate,
+  restoredSubscriptionState,
   subscriptionMatches,
 } from "../src/domain/subscriptions.js";
 
@@ -39,5 +40,27 @@ describe("subscription business rules", () => {
         directionId: "latin",
       }),
     ).toBe(false);
+  });
+});
+
+describe("restoring a deducted lesson", () => {
+  it("reactivates a used subscription when it is still valid", () => {
+    expect(
+      restoredSubscriptionState({
+        remainingLessons: 0,
+        endDate: new Date("2026-08-30T23:59:59.999Z"),
+        now: new Date("2026-08-16T10:00:00.000Z"),
+      }),
+    ).toEqual({ remainingLessons: 1, status: "ACTIVE", burnedLessons: 0 });
+  });
+
+  it("keeps a restored lesson expired after the validity period", () => {
+    expect(
+      restoredSubscriptionState({
+        remainingLessons: 0,
+        endDate: new Date("2026-08-10T23:59:59.999Z"),
+        now: new Date("2026-08-16T10:00:00.000Z"),
+      }),
+    ).toEqual({ remainingLessons: 1, status: "EXPIRED", burnedLessons: 1 });
   });
 });

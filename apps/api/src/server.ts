@@ -5,6 +5,7 @@ import helmet from "@fastify/helmet";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
 import argon2 from "argon2";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "./db.js";
 import { env } from "./env.js";
@@ -14,6 +15,7 @@ import { decryptSecret, encryptSecret } from "./security/crypto.js";
 import {
   derivedSubscriptionStatus,
   inclusiveEndDate,
+  restoredSubscriptionState,
   subscriptionMatches,
 } from "./domain/subscriptions.js";
 import { generateScheduleEvents } from "./domain/schedules.js";
@@ -38,7 +40,7 @@ await app.register(jwt, {
   secret: env.JWT_SECRET,
   cookie: { cookieName: "miles_session", signed: false },
 });
-await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
+await app.register(rateLimit, { max: 600, timeWindow: "1 minute" });
 await app.register(authPlugin);
 
 const sessionCookie = {
@@ -1010,7 +1012,7 @@ app.post(
             category,
             method: input.paymentMethod,
             purpose: input.title,
-            paidAt: input.startsAt,
+            paidAt: new Date(),
             createdById: request.sessionUser!.id,
           },
         });
@@ -1032,17 +1034,26 @@ app.post(
 app.post(
   "/events/:id/cancel",
   { preHandler: app.requirePermission("schedule.write") },
-  async (request) => {
+  async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const input = z.object({ reason: z.string().min(3) }).parse(request.body);
+    const currentEvent = await db.calendarEvent.findUniqueOrThrow({
+      where: { id },
+      select: { status: true },
+    });
+    if (currentEvent.status === "CANCELLED")
+      return reply.code(409).send({ message: "Подію вже скасовано" });
     const result = await db.$transaction(async (tx) => {
       const attendances = await tx.attendance.findMany({
         where: { eventId: id, deducted: true, subscriptionId: { not: null } },
       });
       for (const attendance of attendances) {
-        await tx.subscription.update({
+        const subscription = await tx.subscription.findUniqueOrThrow({
           where: { id: attendance.subscriptionId! },
-          data: { remainingLessons: { increment: 1 } },
+        });
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: restoredSubscriptionState(subscription),
         });
         await tx.attendance.update({
           where: { id: attendance.id },
@@ -1110,8 +1121,12 @@ app.put(
       .parse(request.body);
     const event = await db.calendarEvent.findUniqueOrThrow({
       where: { id: eventId },
-      select: { teacherId: true, title: true },
+      select: { teacherId: true, title: true, status: true },
     });
+    if (event.status === "CANCELLED")
+      return reply
+        .code(409)
+        .send({ message: "Для скасованої події не можна відмічати присутність" });
     if (!event.teacherId)
       return reply
         .code(409)
@@ -1149,15 +1164,21 @@ app.put(
       const event = await tx.calendarEvent.findUniqueOrThrow({
         where: { id: params.eventId },
       });
+      if (event.status === "CANCELLED")
+        return { error: "EVENT_CANCELLED" as const };
       const existing = await tx.attendance.findUnique({
         where: { eventId_clientId: params },
       });
       if (existing?.status === input.status) return existing;
-      if (existing?.deducted && existing.subscriptionId)
-        await tx.subscription.update({
+      if (existing?.deducted && existing.subscriptionId) {
+        const subscription = await tx.subscription.findUniqueOrThrow({
           where: { id: existing.subscriptionId },
-          data: { remainingLessons: { increment: 1 } },
         });
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: restoredSubscriptionState(subscription),
+        });
+      }
       let subscriptionId: string | null = null;
       let deducted = false;
       if (input.status === "PRESENT") {
@@ -1198,7 +1219,10 @@ app.put(
     });
     if ("error" in result)
       return reply.code(409).send({
-        message: "Немає відповідного активного абонемента",
+        message:
+          result.error === "EVENT_CANCELLED"
+            ? "Для скасованої події не можна змінювати відвідування"
+            : "Немає відповідного активного абонемента",
         code: result.error,
       });
     await audit(request, "MARK_ATTENDANCE", "Attendance", result.id, input);
@@ -1728,6 +1752,7 @@ app.post(
         `https://api.telegram.org/bot${decryptSecret(tokenSetting.value)}/sendMessage`,
         {
           method: "POST",
+          signal: AbortSignal.timeout(10_000),
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             chat_id: chatId,
@@ -1863,6 +1888,18 @@ app.setErrorHandler((error, _request, reply) => {
     return reply
       .code(400)
       .send({ message: "Перевірте введені дані", issues: error.issues });
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2025")
+      return reply.code(404).send({ message: "Запис не знайдено" });
+    if (error.code === "P2002")
+      return reply.code(409).send({ message: "Такий запис уже існує" });
+    if (error.code === "P2003")
+      return reply.code(400).send({ message: "Пов'язаний запис не знайдено" });
+    if (error.code === "P2034")
+      return reply
+        .code(409)
+        .send({ message: "Дані змінилися одночасно. Повторіть операцію" });
+  }
   app.log.error(error);
   return reply
     .code((error as { statusCode?: number }).statusCode ?? 500)
@@ -1923,6 +1960,7 @@ async function notifyCancelledEvent(
           `https://api.telegram.org/bot${token}/sendMessage`,
           {
             method: "POST",
+            signal: AbortSignal.timeout(10_000),
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ chat_id: chatId, text: message }),
           },
