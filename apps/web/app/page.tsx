@@ -21,14 +21,13 @@ export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const login = useMutation<{ mustChangePassword: boolean }>({
+  const login = useMutation({
     mutationFn: () =>
       api("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       }),
-    onSuccess: (result) =>
-      router.replace(result.mustChangePassword ? "/profile" : "/dashboard"),
+    onSuccess: () => router.replace("/dashboard"),
     onError: (error: Error) => toast.error(error.message),
   })
   return (

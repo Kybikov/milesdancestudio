@@ -97,10 +97,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     )
   const user = me.data.user
-  if (user.mustChangePassword && pathname !== "/profile") {
-    router.replace("/profile")
-    return null
-  }
   return (
     <div className="min-h-svh lg:p-3">
       <aside className="fixed inset-y-3 left-3 z-30 hidden w-64 flex-col rounded-2xl border bg-card/95 p-3 shadow-sm backdrop-blur lg:flex">

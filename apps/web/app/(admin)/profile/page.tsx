@@ -47,11 +47,6 @@ export default function ProfilePage() {
         title="Особистий профіль"
         description="Ваші дані та безпека входу."
       />
-      {user.mustChangePassword && (
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Змініть тимчасовий пароль перед початком роботи.
-        </div>
-      )}
       <div className="grid gap-5 xl:grid-cols-[.7fr_1.3fr]">
         <Card className="miles-card">
           <CardContent className="flex flex-col items-center p-6 text-center">

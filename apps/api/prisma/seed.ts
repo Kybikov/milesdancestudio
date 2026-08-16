@@ -100,11 +100,13 @@ async function main() {
       displayName: "Олександра Майлс",
       avatarPath: "/owner-avatar.png",
       isActive: true,
+      mustChangePassword: false,
     },
     create: {
       email: env.OWNER_EMAIL.toLowerCase(),
       displayName: "Олександра Майлс",
       avatarPath: "/owner-avatar.png",
+      mustChangePassword: false,
       passwordHash: await argon2.hash(env.OWNER_PASSWORD, {
         type: argon2.argon2id,
       }),
@@ -112,10 +114,15 @@ async function main() {
   });
   const admin = await db.user.upsert({
     where: { email: env.ADMIN_EMAIL.toLowerCase() },
-    update: { displayName: "Адміністратор Miles", isActive: true },
+    update: {
+      displayName: "Адміністратор Miles",
+      isActive: true,
+      mustChangePassword: false,
+    },
     create: {
       email: env.ADMIN_EMAIL.toLowerCase(),
       displayName: "Адміністратор Miles",
+      mustChangePassword: false,
       passwordHash: await argon2.hash(env.ADMIN_PASSWORD, {
         type: argon2.argon2id,
       }),
