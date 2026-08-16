@@ -1,0 +1,24 @@
+# Архітектура
+
+## Компоненти
+
+- `apps/web` — Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query/Table, Recharts.
+- `apps/api` — Fastify API, TypeScript, Prisma, PostgreSQL, JWT session cookie, RBAC.
+- `postgres` — єдине надійне сховище бізнес-даних.
+- Docker Compose — локальна й production-ізоляція.
+
+Redis не є обов'язковим для поточного релізу: функціональність не потребує розподілених websocket-сесій або важких черг. Архітектура дозволяє додати його окремим сервісом пізніше.
+
+## Межі
+
+Browser звертається до API через `NEXT_PUBLIC_API_URL`. API дозволяє CORS тільки для погодженого frontend origin і використовує secure HttpOnly cookie у production.
+
+API є єдиним місцем бізнес-правил: списання абонементів, скасування занять, платежі та аудит виконуються у транзакціях PostgreSQL.
+
+## Надійність
+
+- Унікальні обмеження захищають від подвійного відвідування.
+- Перевірка конфліктів календаря виконується в транзакції.
+- Фінансові записи append-only; скасування є окремою зміною стану з аудитом.
+- Seed і міграції ідемпотентні.
+- Усі timestamps зберігаються в UTC; бізнес-час показується в `Europe/Kyiv`.
