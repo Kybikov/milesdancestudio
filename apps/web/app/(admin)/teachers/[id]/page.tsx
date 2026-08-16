@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { use, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { api, type SessionUser } from "@/lib/api"
 import { dateTime, money } from "@/lib/format"
 import { PageHeader } from "@/components/page-header"
 import { StatusBadge } from "@/components/status-badge"
@@ -66,6 +66,12 @@ export default function TeacherProfilePage({
   initialFrom.setDate(initialFrom.getDate() - 90)
   const [from, setFrom] = useState(initialFrom.toISOString().slice(0, 10))
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10))
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api<{ user: SessionUser }>("/auth/me"),
+  })
+  const canSeeFinance =
+    me.data?.user.permissions.includes("finances.read") ?? false
   const query = useQuery({
     queryKey: ["teacher-overview", id, from, to],
     queryFn: () =>
@@ -148,11 +154,13 @@ export default function TeacherProfilePage({
           label="Годин проведено"
           value={data.metrics.hours.toFixed(1)}
         />
-        <Metric
-          icon={Banknote}
-          label="Пов’язані оплати"
-          value={money(data.metrics.collectedCents)}
-        />
+        {canSeeFinance && (
+          <Metric
+            icon={Banknote}
+            label="Пов’язані оплати"
+            value={money(data.metrics.collectedCents)}
+          />
+        )}
         <Metric
           icon={UserCheck}
           label="Присутність викладача"

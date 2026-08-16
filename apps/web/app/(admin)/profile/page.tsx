@@ -62,7 +62,11 @@ export default function ProfilePage() {
               {user.roles.map((role) => (
                 <Badge key={role} variant="secondary">
                   <ShieldCheck />{" "}
-                  {role === "OWNER" ? "Власниця" : "Адміністратор"}
+                  {role === "OWNER"
+                    ? "Власниця"
+                    : role === "TEACHER"
+                      ? "Викладач"
+                      : "Адміністратор"}
                 </Badge>
               ))}
             </div>

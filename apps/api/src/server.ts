@@ -52,6 +52,22 @@ const sessionCookie = {
   maxAge: 60 * 60 * 12,
 };
 
+function scopedTeacherId(request: { sessionUser?: { roles: string[]; teacherId: string | null } }) {
+  const user = request.sessionUser;
+  if (!user) return null;
+  const teacherOnly =
+    user.roles.includes("TEACHER") &&
+    !user.roles.includes("OWNER") &&
+    !user.roles.includes("ADMIN");
+  if (!teacherOnly) return null;
+  if (!user.teacherId) {
+    throw Object.assign(new Error("Акаунт не прив'язано до викладача"), {
+      statusCode: 403,
+    });
+  }
+  return user.teacherId;
+}
+
 app.get("/health", async () => ({
   status: "ok",
   service: "miles-api",
@@ -153,6 +169,8 @@ app.patch(
         displayName: true,
         avatarPath: true,
         mustChangePassword: true,
+        teacherId: true,
+        teacher: { select: { id: true, name: true } },
       },
     });
     await audit(request, "UPDATE_PROFILE", "User", user.id, input);
@@ -163,7 +181,8 @@ app.patch(
 app.get(
   "/dashboard",
   { preHandler: app.requirePermission("dashboard.read") },
-  async () => {
+  async (request) => {
+    const teacherId = scopedTeacherId(request);
     const now = new Date();
     const dayStart = new Date(now);
     dayStart.setHours(0, 0, 0, 0);
@@ -173,7 +192,7 @@ app.get(
     const [teachers, events, clients, activeSubscriptions, payments] =
       await Promise.all([
         db.teacher.findMany({
-          where: { isActive: true },
+          where: { isActive: true, id: teacherId ?? undefined },
           include: {
             directions: { include: { direction: true } },
             groups: { include: { _count: { select: { members: true } } } },
@@ -190,6 +209,7 @@ app.get(
           where: {
             startsAt: { gte: dayStart, lte: dayEnd },
             status: "SCHEDULED",
+            teacherId: teacherId ?? undefined,
           },
           include: {
             teacher: true,
@@ -198,12 +218,28 @@ app.get(
           },
           orderBy: { startsAt: "asc" },
         }),
-        db.client.count({ where: { isActive: true } }),
+        db.client.count({
+          where: {
+            isActive: true,
+            groups: teacherId
+              ? { some: { group: { teacherId } } }
+              : undefined,
+          },
+        }),
         db.subscription.count({
-          where: { status: { in: ["ACTIVE", "EXPIRING"] } },
+          where: {
+            status: { in: ["ACTIVE", "EXPIRING"] },
+            client: teacherId
+              ? { groups: { some: { group: { teacherId } } } }
+              : undefined,
+          },
         }),
         db.payment.aggregate({
-          where: { status: "CONFIRMED", paidAt: { gte: monthStart } },
+          where: {
+            status: "CONFIRMED",
+            paidAt: { gte: monthStart },
+            id: teacherId ? "__teacher_finances_hidden__" : undefined,
+          },
           _sum: { amountCents: true },
         }),
       ]);
@@ -222,8 +258,9 @@ app.get(
 app.get(
   "/teachers",
   { preHandler: app.requirePermission("teachers.read") },
-  async () =>
+  async (request) =>
     db.teacher.findMany({
+      where: { id: scopedTeacherId(request) ?? undefined },
       include: {
         directions: { include: { direction: true } },
         groups: {
@@ -238,6 +275,9 @@ app.get(
   { preHandler: app.requirePermission("teachers.read") },
   async (request) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
+    const teacherId = scopedTeacherId(request);
+    if (teacherId && teacherId !== id)
+      throw Object.assign(new Error("Недостатньо прав"), { statusCode: 403 });
     const query = z
       .object({
         from: z.coerce.date().optional(),
@@ -272,6 +312,7 @@ app.get(
       }),
       db.payment.findMany({
         where: {
+          id: teacherId ? "__teacher_finances_hidden__" : undefined,
           status: "CONFIRMED",
           paidAt: { gte: from, lte: to },
           OR: [
@@ -437,8 +478,9 @@ app.patch(
 app.get(
   "/groups",
   { preHandler: app.requirePermission("teachers.read") },
-  async () =>
+  async (request) =>
     db.danceGroup.findMany({
+      where: { teacherId: scopedTeacherId(request) ?? undefined },
       include: {
         teacher: true,
         direction: true,
@@ -456,6 +498,7 @@ app.post(
       .object({
         name: z.string().min(2),
         level: z.string().optional(),
+        description: z.string().nullable().optional(),
         teacherId: z.string(),
         directionId: z.string(),
       })
@@ -474,6 +517,7 @@ app.patch(
       .object({
         name: z.string().min(2).optional(),
         level: z.string().nullable().optional(),
+        description: z.string().nullable().optional(),
         teacherId: z.string().optional(),
         directionId: z.string().optional(),
         isActive: z.boolean().optional(),
@@ -519,18 +563,21 @@ app.get(
     const { search } = z
       .object({ search: z.string().optional() })
       .parse(request.query);
-    return db.client.findMany({
-      where: search
-        ? {
-            OR: [
+    const teacherId = scopedTeacherId(request);
+    const clients = await db.client.findMany({
+      where: {
+        groups: teacherId ? { some: { group: { teacherId } } } : undefined,
+        OR: search
+          ? [
               { firstName: { contains: search, mode: "insensitive" } },
               { lastName: { contains: search, mode: "insensitive" } },
               { phone: { contains: search } },
-            ],
-          }
-        : undefined,
+            ]
+          : undefined,
+      },
       include: {
         groups: {
+          where: teacherId ? { group: { teacherId } } : undefined,
           include: { group: { include: { teacher: true, direction: true } } },
         },
         subscriptions: { orderBy: { createdAt: "desc" } },
@@ -538,6 +585,21 @@ app.get(
       },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     });
+    if (!teacherId) return clients;
+    return clients.map((client) => ({
+      ...client,
+      subscriptions: client.subscriptions.map((subscription) => ({
+        id: subscription.id,
+        productName: subscription.productName,
+        totalLessons: subscription.totalLessons,
+        remainingLessons: subscription.remainingLessons,
+        burnedLessons: subscription.burnedLessons,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate,
+        status: subscription.status,
+      })),
+      _count: { ...client._count, payments: 0 },
+    }));
   },
 );
 app.get(
@@ -545,10 +607,15 @@ app.get(
   { preHandler: app.requirePermission("clients.read") },
   async (request) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
-    return db.client.findUniqueOrThrow({
-      where: { id },
+    const teacherId = scopedTeacherId(request);
+    const client = await db.client.findFirstOrThrow({
+      where: {
+        id,
+        groups: teacherId ? { some: { group: { teacherId } } } : undefined,
+      },
       include: {
         groups: {
+          where: teacherId ? { group: { teacherId } } : undefined,
           include: { group: { include: { teacher: true, direction: true } } },
         },
         subscriptions: {
@@ -559,6 +626,7 @@ app.get(
           orderBy: { createdAt: "desc" },
         },
         attendances: {
+          where: teacherId ? { event: { teacherId } } : undefined,
           include: {
             event: {
               include: {
@@ -573,6 +641,22 @@ app.get(
         charges: { include: { charge: true } },
       },
     });
+    if (!teacherId) return client;
+    return {
+      ...client,
+      payments: [],
+      charges: [],
+      subscriptions: client.subscriptions.map((subscription) => ({
+        id: subscription.id,
+        productName: subscription.productName,
+        totalLessons: subscription.totalLessons,
+        remainingLessons: subscription.remainingLessons,
+        burnedLessons: subscription.burnedLessons,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate,
+        status: subscription.status,
+      })),
+    };
   },
 );
 app.post(
@@ -864,24 +948,41 @@ app.get(
   "/events",
   { preHandler: app.requirePermission("schedule.read") },
   async (request) => {
+    const teacherId = scopedTeacherId(request);
     const query = z
       .object({
         from: z.coerce.date().optional(),
         to: z.coerce.date().optional(),
       })
       .parse(request.query);
-    return db.calendarEvent.findMany({
-      where:
-        query.from || query.to
-          ? { startsAt: { gte: query.from, lte: query.to } }
-          : undefined,
+    const events = await db.calendarEvent.findMany({
+      where: {
+        startsAt:
+          query.from || query.to ? { gte: query.from, lte: query.to } : undefined,
+        teacherId: teacherId ?? undefined,
+      },
       include: {
         teacher: true,
         direction: true,
         group: {
           include: {
             members: {
-              include: { client: { include: { subscriptions: true } } },
+              include: {
+                client: {
+                  include: {
+                    subscriptions: {
+                      select: {
+                        id: true,
+                        productName: true,
+                        remainingLessons: true,
+                        totalLessons: true,
+                        endDate: true,
+                        status: true,
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -890,13 +991,22 @@ app.get(
       },
       orderBy: { startsAt: "asc" },
     });
+    if (!teacherId) return events;
+    return events.map((event) => {
+      const safeEvent: Partial<typeof event> = { ...event };
+      delete safeEvent.priceCents;
+      delete safeEvent.paymentMethod;
+      delete safeEvent.isPaid;
+      return safeEvent;
+    });
   },
 );
 app.get(
   "/schedules",
   { preHandler: app.requirePermission("schedule.read") },
-  async () =>
+  async (request) =>
     db.regularSchedule.findMany({
+      where: { teacherId: scopedTeacherId(request) ?? undefined },
       include: { group: true, teacher: true, direction: true },
       orderBy: [{ weekday: "asc" }, { startMinute: "asc" }],
     }),
@@ -1098,6 +1208,9 @@ app.post(
   async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const event = await db.calendarEvent.findUniqueOrThrow({ where: { id } });
+    const teacherId = scopedTeacherId(request);
+    if (teacherId && event.teacherId !== teacherId)
+      return reply.code(403).send({ message: "Це заняття іншого викладача" });
     if (event.status === "CANCELLED")
       return reply
         .code(409)
@@ -1123,6 +1236,9 @@ app.put(
       where: { id: eventId },
       select: { teacherId: true, title: true, status: true },
     });
+    const teacherId = scopedTeacherId(request);
+    if (teacherId && event.teacherId !== teacherId)
+      return reply.code(403).send({ message: "Це заняття іншого викладача" });
     if (event.status === "CANCELLED")
       return reply
         .code(409)
@@ -1164,6 +1280,9 @@ app.put(
       const event = await tx.calendarEvent.findUniqueOrThrow({
         where: { id: params.eventId },
       });
+      const teacherId = scopedTeacherId(request);
+      if (teacherId && event.teacherId !== teacherId)
+        return { error: "OTHER_TEACHER" as const };
       if (event.status === "CANCELLED")
         return { error: "EVENT_CANCELLED" as const };
       const existing = await tx.attendance.findUnique({
@@ -1218,10 +1337,12 @@ app.put(
       });
     });
     if ("error" in result)
-      return reply.code(409).send({
+      return reply.code(result.error === "OTHER_TEACHER" ? 403 : 409).send({
         message:
           result.error === "EVENT_CANCELLED"
             ? "Для скасованої події не можна змінювати відвідування"
+            : result.error === "OTHER_TEACHER"
+              ? "Це заняття іншого викладача"
             : "Немає відповідного активного абонемента",
         code: result.error,
       });
@@ -1597,6 +1718,8 @@ app.get(
         avatarPath: true,
         isActive: true,
         mustChangePassword: true,
+        teacherId: true,
+        teacher: { select: { id: true, name: true } },
         createdAt: true,
         roles: { include: { role: true } },
       },
@@ -1613,12 +1736,22 @@ app.post(
         displayName: z.string().min(2),
         password: z.string().min(12),
         roleIds: z.array(z.string()).min(1),
+        teacherId: z.string().nullable().optional(),
       })
       .parse(request.body);
+    const selectedRoles = await db.role.findMany({
+      where: { id: { in: input.roleIds } },
+      select: { code: true },
+    });
+    if (selectedRoles.some((role) => role.code === "TEACHER") && !input.teacherId)
+      throw Object.assign(new Error("Для ролі викладача оберіть профіль"), {
+        statusCode: 400,
+      });
     const result = await db.user.create({
       data: {
         email: input.email.toLowerCase(),
         displayName: input.displayName,
+        teacherId: input.teacherId,
         passwordHash: await argon2.hash(input.password, {
           type: argon2.argon2id,
         }),
@@ -1629,6 +1762,26 @@ app.post(
     });
     await audit(request, "CREATE", "User", result.id, input);
     return { id: result.id };
+  },
+);
+app.patch(
+  "/admin/users/:id",
+  { preHandler: app.requirePermission("users.manage") },
+  async (request) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const input = z
+      .object({
+        isActive: z.boolean().optional(),
+        teacherId: z.string().nullable().optional(),
+      })
+      .parse(request.body);
+    if (id === request.sessionUser!.id && input.isActive === false)
+      throw Object.assign(new Error("Не можна вимкнути власний акаунт"), {
+        statusCode: 400,
+      });
+    const result = await db.user.update({ where: { id }, data: input });
+    await audit(request, "UPDATE", "User", id, input);
+    return { id: result.id, isActive: result.isActive };
   },
 );
 app.get(
@@ -1791,13 +1944,15 @@ app.get(
     }),
 );
 
-app.get("/activity", { preHandler: app.authenticate }, async () =>
-  db.auditLog.findMany({
+app.get("/activity", { preHandler: app.authenticate }, async (request) => {
+  const teacherId = scopedTeacherId(request);
+  return db.auditLog.findMany({
+    where: teacherId ? { actorId: request.sessionUser!.id } : undefined,
     include: { actor: { select: { displayName: true, avatarPath: true } } },
     orderBy: { createdAt: "desc" },
     take: 80,
-  }),
-);
+  });
+});
 
 app.get("/notifications", { preHandler: app.authenticate }, async (request) => {
   await syncSubscriptionNotifications(request.sessionUser!.id);

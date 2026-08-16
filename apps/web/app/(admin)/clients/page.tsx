@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { api, SessionUser } from "@/lib/api"
 import { PageHeader } from "@/components/page-header"
 import { StatusBadge } from "@/components/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Smartphone, TicketCheck } from "lucide-react"
+import { LayoutGrid, List, Plus, Search, Smartphone, TicketCheck } from "lucide-react"
 import { toast } from "sonner"
 
 type Client = {
@@ -42,6 +42,12 @@ export default function ClientsPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState("")
   const [adding, setAdding] = useState(false)
+  const [view, setView] = useState<"cards" | "table">("cards")
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api<{ user: SessionUser }>("/auth/me"),
+  })
+  const canWrite = me.data?.user.permissions.includes("clients.write")
   const clients = useQuery({
     queryKey: ["clients", search],
     queryFn: () =>
@@ -64,21 +70,39 @@ export default function ClientsPage() {
       <PageHeader
         title="Клієнти"
         description="База клієнтів, групи, абонементи та контакти."
-        action={
+        action={canWrite ? (
           <Button onClick={() => setAdding(!adding)}>
             <Plus />
             Новий клієнт
           </Button>
-        }
+        ) : undefined}
       />
-      <div className="relative mb-4 max-w-xl">
-        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="h-11 pl-10"
-          placeholder="Пошук за ім’ям або телефоном"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative max-w-xl flex-1">
+          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="h-11 pl-10"
+            placeholder="Пошук за ім’ям або телефоном"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        <div className="flex rounded-xl border bg-card p-1">
+          <Button
+            size="sm"
+            variant={view === "cards" ? "secondary" : "ghost"}
+            onClick={() => setView("cards")}
+          >
+            <LayoutGrid /> Картки
+          </Button>
+          <Button
+            size="sm"
+            variant={view === "table" ? "secondary" : "ghost"}
+            onClick={() => setView("table")}
+          >
+            <List /> Таблиця
+          </Button>
+        </div>
       </div>
       {adding && (
         <Card className="miles-card mb-5">
@@ -126,6 +150,50 @@ export default function ClientsPage() {
           </CardContent>
         </Card>
       )}
+      {view === "table" ? (
+        <Card className="miles-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Клієнт</th>
+                  <th className="px-4 py-3 font-medium">Телефон</th>
+                  <th className="px-4 py-3 font-medium">Курс</th>
+                  <th className="px-4 py-3 font-medium">Абонемент</th>
+                  <th className="px-4 py-3 text-right font-medium">Відвідувань</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {clients.data?.map((client) => {
+                  const subscription = client.subscriptions.find((item) =>
+                    ["ACTIVE", "EXPIRING"].includes(item.status)
+                  )
+                  return (
+                    <tr key={client.id} className="transition hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <Link className="font-semibold hover:text-primary" href={`/clients/${client.id}`}>
+                          {client.firstName} {client.lastName}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{client.phone}</td>
+                      <td className="px-4 py-3">{client.groups[0]?.group.name ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        {subscription ? (
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={subscription.status} />
+                            <span>{subscription.remainingLessons}/{subscription.totalLessons}</span>
+                          </div>
+                        ) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold">{client._count.attendances}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : (
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {clients.data?.map((client) => {
           const subscription = client.subscriptions.find((item) =>
@@ -186,6 +254,7 @@ export default function ClientsPage() {
           )
         })}
       </div>
+      )}
     </div>
   )
 }

@@ -3,10 +3,11 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { api, type SessionUser } from "@/lib/api"
 import { date, money } from "@/lib/format"
 import { PageHeader } from "@/components/page-header"
 import { StatusBadge } from "@/components/status-badge"
+import { ClientAttendanceChart } from "@/components/client-attendance-chart"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -68,7 +69,7 @@ type ClientDetailsData = {
   }[]
   attendances: {
     id: string
-    status: string
+    status: "PRESENT" | "ABSENT"
     markedAt: string
     event: {
       id: string
@@ -84,6 +85,15 @@ type Group = { id: string; name: string }
 export function ClientDetails({ id }: { id: string }) {
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api<{ user: SessionUser }>("/auth/me"),
+  })
+  const canWrite = me.data?.user.permissions.includes("clients.write") ?? false
+  const canSeeFinance =
+    me.data?.user.permissions.includes("finances.read") ||
+    me.data?.user.permissions.includes("payments.create") ||
+    false
   const query = useQuery({
     queryKey: ["client", id],
     queryFn: () => api<ClientDetailsData>(`/clients/${id}`),
@@ -142,10 +152,12 @@ export function ClientDetails({ id }: { id: string }) {
         description="Контакти, групи, абонементи, оплати та відвідування."
         action={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setEditing(!editing)}>
-              <Pencil />
-              Редагувати
-            </Button>
+            {canWrite && (
+              <Button variant="outline" onClick={() => setEditing(!editing)}>
+                <Pencil />
+                Редагувати
+              </Button>
+            )}
             <Button variant="outline" render={<Link href="/clients" />}>
               <ArrowLeft />
               До списку
@@ -161,13 +173,21 @@ export function ClientDetails({ id }: { id: string }) {
           label="Відвідуваність"
           value={`${present + absent ? Math.round((present / (present + absent)) * 100) : 0}%`}
         />
-        <ClientMetric
-          icon={Banknote}
-          label="Сплачено загалом"
-          value={money(
-            confirmedPayments.reduce((sum, item) => sum + item.amountCents, 0)
-          )}
-        />
+        {canSeeFinance ? (
+          <ClientMetric
+            icon={Banknote}
+            label="Сплачено загалом"
+            value={money(
+              confirmedPayments.reduce((sum, item) => sum + item.amountCents, 0)
+            )}
+          />
+        ) : (
+          <ClientMetric
+            icon={CalendarCheck}
+            label="Усього занять"
+            value={present + absent}
+          />
+        )}
       </div>
       {editing && (
         <Card className="miles-card mb-5">
@@ -242,7 +262,7 @@ export function ClientDetails({ id }: { id: string }) {
             <CardTitle className="text-base">Групи</CardTitle>
           </CardHeader>
           <CardContent>
-            <form
+            {canWrite && <form
               className="mb-3 flex gap-2"
               onSubmit={(event) => {
                 event.preventDefault()
@@ -271,7 +291,7 @@ export function ClientDetails({ id }: { id: string }) {
               <Button type="submit" size="icon" variant="outline">
                 <Plus />
               </Button>
-            </form>
+            </form>}
             <div className="grid gap-2 sm:grid-cols-2">
               {client.groups.map(({ group }) => (
                 <div
@@ -287,19 +307,22 @@ export function ClientDetails({ id }: { id: string }) {
                       {group.direction.name}
                     </Badge>
                   </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => removeGroup.mutate(group.id)}
-                  >
-                    <X className="size-4 text-rose-500" />
-                  </Button>
+                  {canWrite && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => removeGroup.mutate(group.id)}
+                    >
+                      <X className="size-4 text-rose-500" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+      <ClientAttendanceChart attendances={client.attendances} />
       <Card className="miles-card mb-5">
         <CardHeader>
           <CardTitle className="text-base">Абонементи</CardTitle>
@@ -364,7 +387,7 @@ export function ClientDetails({ id }: { id: string }) {
           </div>
         </CardContent>
       </Card>
-      <div className="grid gap-5 lg:grid-cols-2">
+      {canSeeFinance && <div className="grid gap-5 lg:grid-cols-2">
         <Card className="miles-card">
           <CardHeader>
             <CardTitle className="text-base">Оплати</CardTitle>
@@ -416,7 +439,7 @@ export function ClientDetails({ id }: { id: string }) {
             ))}
           </CardContent>
         </Card>
-      </div>
+      </div>}
     </div>
   )
 }

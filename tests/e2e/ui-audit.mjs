@@ -10,6 +10,7 @@ const routes = [
   "/dashboard",
   "/calendar",
   "/teachers",
+  "/courses",
   "/clients",
   "/subscriptions",
   "/payments",

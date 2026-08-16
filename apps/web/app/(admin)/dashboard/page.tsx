@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Image from "next/image"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { api, type SessionUser } from "@/lib/api"
 import { money, time } from "@/lib/format"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -74,6 +74,13 @@ type Event = {
 export default function DashboardPage() {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api<{ user: SessionUser }>("/auth/me"),
+  })
+  const teacherOnly =
+    me.data?.user.roles.includes("TEACHER") &&
+    !me.data.user.roles.some((role) => role === "OWNER" || role === "ADMIN")
   const dashboard = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api<Dashboard>("/dashboard"),
@@ -137,11 +144,19 @@ export default function DashboardPage() {
           label="Активних абонементів"
           value={data?.metrics.activeSubscriptions ?? 0}
         />
-        <Metric
-          icon={CreditCard}
-          label="Отримано за місяць"
-          value={money(data?.metrics.monthlyIncomeCents)}
-        />
+        {teacherOnly ? (
+          <Metric
+            icon={CalendarDays}
+            label="Мої заняття сьогодні"
+            value={data?.events.length ?? 0}
+          />
+        ) : (
+          <Metric
+            icon={CreditCard}
+            label="Отримано за місяць"
+            value={money(data?.metrics.monthlyIncomeCents)}
+          />
+        )}
       </div>
       <section className="mb-7">
         <h2 className="mb-3 text-lg font-semibold">Викладачі</h2>

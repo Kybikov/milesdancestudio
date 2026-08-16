@@ -83,6 +83,7 @@ model User {
   avatarPath         String?
   isActive           Boolean            @default(true)
   mustChangePassword Boolean            @default(false)
+  teacherId          String?            @unique
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   roles              UserRole[]
@@ -92,6 +93,7 @@ model User {
   telegramLogs       TelegramLog[]
   notifications      Notification[]
   pushSubscriptions  PushSubscription[]
+  teacher            Teacher?           @relation(fields: [teacherId], references: [id], onDelete: SetNull)
 }
 
 model Role {
@@ -144,6 +146,7 @@ model Teacher {
   events      CalendarEvent[]
   attendances TeacherAttendance[]
   payments    Payment[]
+  user        User?
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 }
@@ -171,6 +174,7 @@ model DanceGroup {
   id          String            @id @default(cuid())
   name        String
   level       String?
+  description String?
   teacherId   String
   directionId String
   isActive    Boolean           @default(true)

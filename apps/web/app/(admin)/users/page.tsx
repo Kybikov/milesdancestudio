@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Plus, ShieldCheck } from "lucide-react"
+import { Plus, Power, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 type Role = {
   id: string
@@ -23,6 +23,7 @@ type Role = {
   _count: { users: number }
 }
 type Permission = { id: string; code: string; description: string }
+type Teacher = { id: string; name: string }
 type User = {
   id: string
   email: string
@@ -30,6 +31,8 @@ type User = {
   isActive: boolean
   mustChangePassword: boolean
   roles: { role: Role }[]
+  teacher?: Teacher
+  teacherId?: string | null
 }
 export default function UsersPage() {
   const qc = useQueryClient()
@@ -43,6 +46,10 @@ export default function UsersPage() {
     queryKey: ["roles"],
     queryFn: () =>
       api<{ roles: Role[]; permissions: Permission[] }>("/admin/roles"),
+  })
+  const teachers = useQuery({
+    queryKey: ["teachers"],
+    queryFn: () => api<Teacher[]>("/teachers"),
   })
   const create = useMutation({
     mutationFn: (data: object) =>
@@ -69,6 +76,18 @@ export default function UsersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["roles"] })
       toast.success("Дозволи оновлено")
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const toggleUser = useMutation({
+    mutationFn: (user: User) =>
+      api(`/admin/users/${user.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: !user.isActive }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-users"] })
+      toast.success("Статус доступу оновлено")
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -100,6 +119,7 @@ export default function UsersPage() {
                   email: f.get("email"),
                   password: f.get("password"),
                   roleIds: [roleId],
+                  teacherId: f.get("teacherId") || undefined,
                 })
               }}
             >
@@ -133,6 +153,24 @@ export default function UsersPage() {
                   ))}
                 </select>
               </div>
+              {roles.data?.roles.find((role) => role.id === roleId)?.code ===
+                "TEACHER" && (
+                <div className="space-y-2">
+                  <Label>Профіль викладача</Label>
+                  <select
+                    name="teacherId"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    required
+                  >
+                    <option value="">Оберіть викладача</option>
+                    {teachers.data?.map((teacher) => (
+                      <option key={teacher.id} value={teacher.id}>
+                        {teacher.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <Button type="submit" disabled={!roleId}>
                 Створити
               </Button>
@@ -162,7 +200,25 @@ export default function UsersPage() {
                     Змінити пароль
                   </p>
                 )}
+                {user.teacher && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {user.teacher.name}
+                  </p>
+                )}
+                {!user.isActive && (
+                  <p className="mt-1 text-[10px] font-medium text-rose-600">
+                    Доступ вимкнено
+                  </p>
+                )}
               </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                title={user.isActive ? "Вимкнути доступ" : "Увімкнути доступ"}
+                onClick={() => toggleUser.mutate(user)}
+              >
+                <Power className={user.isActive ? "size-4" : "size-4 text-rose-500"} />
+              </Button>
             </CardContent>
           </Card>
         ))}

@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Pencil, Plus, Users } from "lucide-react"
 import { toast } from "sonner"
-import { CatalogManagement } from "@/components/catalog-management"
 
 type Direction = { id: string; name: string }
 type Teacher = {
@@ -76,7 +75,6 @@ export default function TeachersPage() {
           </Button>
         }
       />
-      <CatalogManagement />
       {adding && (
         <Card className="miles-card mb-5">
           <CardHeader>

@@ -32,6 +32,7 @@ export type SessionUser = {
   displayName: string
   avatarPath: string | null
   mustChangePassword: boolean
+  teacherId: string | null
   roles: string[]
   permissions: string[]
 }

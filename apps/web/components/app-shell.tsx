@@ -12,6 +12,7 @@ import { NotificationCenter } from "@/components/notification-center"
 import { ProfileMenu } from "@/components/profile-menu"
 import {
   CalendarDays,
+  BookOpen,
   ChartNoAxesCombined,
   CreditCard,
   LayoutDashboard,
@@ -35,6 +36,7 @@ const items = [
   ["/dashboard", "Головна", LayoutDashboard, "dashboard.read"],
   ["/calendar", "Календар", CalendarDays, "schedule.read"],
   ["/teachers", "Викладачі", UserRound, "teachers.read"],
+  ["/courses", "Курси", BookOpen, "teachers.write"],
   ["/clients", "Клієнти", Users, "clients.read"],
   ["/subscriptions", "Абонементи", TicketCheck, "subscriptions.read"],
   ["/payments", "Оплати", CreditCard, "payments.create"],
@@ -97,6 +99,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     )
   const user = me.data.user
+  const currentItem = items.find(([href]) =>
+    pathname === href || pathname.startsWith(`${href}/`)
+  )
+  const CurrentIcon = currentItem?.[2] ?? Sparkles
   return (
     <div className="min-h-svh lg:p-3">
       <aside className="fixed inset-y-3 left-3 z-30 hidden w-64 flex-col rounded-2xl border bg-card/95 p-3 shadow-sm backdrop-blur lg:flex">
@@ -133,10 +139,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Sheet>
             <span className="font-semibold">Miles</span>
           </div>
-          <div className="hidden items-center gap-2 text-sm lg:flex">
-            <span className="font-medium">
-              {items.find(([href]) => pathname === href)?.[1] ??
-                "Miles Dance Studio"}
+          <div className="hidden min-w-48 items-center gap-3 text-sm lg:flex">
+            <div className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
+              <CurrentIcon className="size-4" />
+            </div>
+            <span className="font-semibold">
+              {currentItem?.[1] ?? "Miles Dance Studio"}
+            </span>
+          </div>
+          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-2 xl:flex">
+            <span className="rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
+              {new Intl.DateTimeFormat("uk-UA", {
+                weekday: "short",
+                day: "numeric",
+                month: "long",
+              }).format(new Date())}
+            </span>
+            <span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+              {user.roles.includes("OWNER")
+                ? "Власниця"
+                : user.roles.includes("TEACHER")
+                  ? "Викладач"
+                  : "Адміністратор"}
             </span>
           </div>
           <div className="flex items-center gap-1">

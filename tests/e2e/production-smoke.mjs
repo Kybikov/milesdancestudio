@@ -76,6 +76,25 @@ async function verify(viewport, name, storageState) {
       path: join(screenshotDir, `${name}-clients.png`),
       fullPage: true,
     });
+  await page.getByRole("button", { name: "Таблиця" }).click();
+  await page.getByRole("table").waitFor();
+  const firstClient = await page.locator('a[href^="/clients/"]').first().getAttribute("href");
+  if (firstClient) {
+    await page.goto(`${baseURL}${firstClient}`, { waitUntil: "networkidle" });
+    await page.getByText("Динаміка відвідування", { exact: true }).waitFor();
+    if (screenshotDir)
+      await page.screenshot({
+        path: join(screenshotDir, `${name}-client-details.png`),
+        fullPage: true,
+      });
+  }
+  await page.goto(`${baseURL}/courses`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Курси", exact: true }).waitFor();
+  if (screenshotDir)
+    await page.screenshot({
+      path: join(screenshotDir, `${name}-courses.png`),
+      fullPage: true,
+    });
   await page.goto(`${baseURL}/calendar`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Календар", exact: true }).waitFor();
   await page.getByRole("button", { name: "Місяць", exact: true }).waitFor();

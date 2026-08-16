@@ -40,6 +40,14 @@ const adminPermissionCodes = permissionDefinitions
       ].includes(code),
   );
 
+const teacherPermissionCodes = [
+  "dashboard.read",
+  "clients.read",
+  "teachers.read",
+  "schedule.read",
+  "attendance.write",
+] as const;
+
 async function main() {
   for (const [code, description] of permissionDefinitions) {
     await db.permission.upsert({
@@ -51,6 +59,9 @@ async function main() {
 
   const adminRoleExisted = Boolean(
     await db.role.findUnique({ where: { code: "ADMIN" }, select: { id: true } }),
+  );
+  const teacherRoleExisted = Boolean(
+    await db.role.findUnique({ where: { code: "TEACHER" }, select: { id: true } }),
   );
   const ownerRole = await db.role.upsert({
     where: { code: "OWNER" },
@@ -72,6 +83,16 @@ async function main() {
       isSystem: true,
     },
   });
+  const teacherRole = await db.role.upsert({
+    where: { code: "TEACHER" },
+    update: { name: "Викладач", isSystem: true },
+    create: {
+      code: "TEACHER",
+      name: "Викладач",
+      description: "Власні заняття, учні та відвідування",
+      isSystem: true,
+    },
+  });
 
   const permissions = await db.permission.findMany();
   await db.rolePermission.createMany({
@@ -89,6 +110,18 @@ async function main() {
         )
         .map((permission) => ({
           roleId: adminRole.id,
+          permissionId: permission.id,
+        })),
+      skipDuplicates: true,
+    });
+  if (!teacherRoleExisted)
+    await db.rolePermission.createMany({
+      data: permissions
+        .filter((permission) =>
+          teacherPermissionCodes.includes(permission.code as never),
+        )
+        .map((permission) => ({
+          roleId: teacherRole.id,
           permissionId: permission.id,
         })),
       skipDuplicates: true,
@@ -289,14 +322,20 @@ async function main() {
     weekdays,
     time,
   ] of schedules) {
+    const description = `${directionName}: системна програма для рівня «${level}» з розвитком техніки, музикальності та впевненості в русі.`;
     const group = await db.danceGroup.upsert({
       where: {
         name_teacherId: { name, teacherId: teacherMap.get(teacherName)! },
       },
-      update: { level, directionId: directionMap.get(directionName)! },
+      update: {
+        level,
+        description,
+        directionId: directionMap.get(directionName)!,
+      },
       create: {
         name,
         level,
+        description,
         teacherId: teacherMap.get(teacherName)!,
         directionId: directionMap.get(directionName)!,
       },
