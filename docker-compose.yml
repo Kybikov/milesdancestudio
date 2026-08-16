@@ -56,8 +56,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
-    ports:
-      - "${API_PORT:-4000}:4000"
+    expose:
+      - "4000"
     networks: [miles_internal, miles_public]
 
   web:
@@ -86,8 +86,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
-    ports:
-      - "${WEB_PORT:-3000}:3000"
+    expose:
+      - "3000"
     networks: [miles_public]
 
 volumes:

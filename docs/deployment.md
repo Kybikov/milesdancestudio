@@ -14,6 +14,7 @@
 - Frontend domain: `admin-miles.wtmelon.store`.
 - API domain: `api-miles.wtmelon.store`.
 - PostgreSQL не публікується назовні.
+- Production використовує лише внутрішні `expose` порти; локальні bindings з `docker-compose.override.yml` не входять у Coolify deployment.
 - Persistent volume використовується тільки для PostgreSQL.
 - Environment задається в Coolify; `.env` не комітиться.
 - HTTPS і автоматичне оновлення сертифікатів забезпечує proxy Coolify.

@@ -28,3 +28,4 @@ apps/web/pnpm-lock.yaml
 apps/web/tsconfig.tsbuildinfo
 /IMG_3675.PNG
 /Miles_Dance_Studio_TZ.docx
+/.deploy-helper.py
