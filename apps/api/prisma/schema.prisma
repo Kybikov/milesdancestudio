@@ -1,0 +1,442 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRING
+  USED
+  EXPIRED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+enum EventType {
+  GROUP
+  INDIVIDUAL
+  RENTAL
+  SHOOTING
+  OTHER
+}
+
+enum EventStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentCategory {
+  SUBSCRIPTION
+  DROP_IN
+  INDIVIDUAL
+  RENTAL
+  LIGHT
+  SHOOTING
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
+
+enum PaymentStatus {
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+enum TeacherAttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+enum NotificationType {
+  SUBSCRIPTION_EXPIRING
+  SUBSCRIPTION_EXPIRED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  ACTIVITY
+  SYSTEM
+}
+
+enum ChargeStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+model User {
+  id                 String             @id @default(cuid())
+  email              String             @unique
+  displayName        String
+  passwordHash       String
+  avatarPath         String?
+  isActive           Boolean            @default(true)
+  mustChangePassword Boolean            @default(false)
+  teacherId          String?            @unique
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  roles              UserRole[]
+  audits             AuditLog[]         @relation("AuditActor")
+  createdPayments    Payment[]          @relation("PaymentCreator")
+  cancelledPayments  Payment[]          @relation("PaymentCanceller")
+  telegramLogs       TelegramLog[]
+  notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
+  teacher            Teacher?           @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  name        String
+  description String?
+  isSystem    Boolean          @default(false)
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  description String
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model Teacher {
+  id          String              @id @default(cuid())
+  name        String              @unique
+  color       String
+  avatarPath  String?
+  phone       String?
+  instagram   String?
+  comment     String?
+  isActive    Boolean             @default(true)
+  directions  TeacherDirection[]
+  groups      DanceGroup[]
+  schedules   RegularSchedule[]
+  events      CalendarEvent[]
+  attendances TeacherAttendance[]
+  payments    Payment[]
+  user        User?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model Direction {
+  id        String             @id @default(cuid())
+  name      String             @unique
+  isActive  Boolean            @default(true)
+  teachers  TeacherDirection[]
+  groups    DanceGroup[]
+  schedules RegularSchedule[]
+  events    CalendarEvent[]
+}
+
+model TeacherDirection {
+  teacherId   String
+  directionId String
+  teacher     Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  direction   Direction @relation(fields: [directionId], references: [id], onDelete: Cascade)
+
+  @@id([teacherId, directionId])
+}
+
+model DanceGroup {
+  id          String            @id @default(cuid())
+  name        String
+  level       String?
+  description String?
+  teacherId   String
+  directionId String
+  isActive    Boolean           @default(true)
+  teacher     Teacher           @relation(fields: [teacherId], references: [id])
+  direction   Direction         @relation(fields: [directionId], references: [id])
+  members     GroupMember[]
+  schedules   RegularSchedule[]
+  events      CalendarEvent[]
+
+  @@unique([name, teacherId])
+}
+
+model Client {
+  id             String         @id @default(cuid())
+  firstName      String
+  lastName       String
+  phone          String         @unique
+  instagram      String?
+  telegramChatId String?
+  comment        String?
+  isActive       Boolean        @default(true)
+  groups         GroupMember[]
+  subscriptions  Subscription[]
+  attendances    Attendance[]
+  payments       Payment[]
+  charges        ClientCharge[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([lastName, firstName])
+}
+
+model GroupMember {
+  groupId  String
+  clientId String
+  group    DanceGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  client   Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  joinedAt DateTime   @default(now())
+
+  @@id([groupId, clientId])
+}
+
+model Product {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  lessonsCount  Int?
+  validityDays  Int?
+  priceCents    Int
+  isDropIn      Boolean        @default(false)
+  isActive      Boolean        @default(true)
+  tariffGroup   Int?
+  description   String?
+  subscriptions Subscription[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  clientId         String
+  productId        String?
+  productName      String
+  priceCents       Int
+  totalLessons     Int
+  remainingLessons Int
+  burnedLessons    Int                @default(0)
+  startDate        DateTime
+  endDate          DateTime
+  status           SubscriptionStatus @default(ACTIVE)
+  teacherIds       String[]
+  directionIds     String[]
+  groupIds         String[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  client           Client             @relation(fields: [clientId], references: [id])
+  product          Product?           @relation(fields: [productId], references: [id])
+  attendances      Attendance[]
+  payments         Payment[]
+
+  @@index([clientId, status])
+  @@index([endDate])
+}
+
+model RegularSchedule {
+  id          String     @id @default(cuid())
+  groupId     String
+  teacherId   String
+  directionId String
+  weekday     Int
+  startMinute Int
+  durationMin Int        @default(60)
+  isActive    Boolean    @default(true)
+  group       DanceGroup @relation(fields: [groupId], references: [id])
+  teacher     Teacher    @relation(fields: [teacherId], references: [id])
+  direction   Direction  @relation(fields: [directionId], references: [id])
+
+  @@unique([groupId, weekday, startMinute])
+}
+
+model CalendarEvent {
+  id                String             @id @default(cuid())
+  title             String
+  type              EventType
+  status            EventStatus        @default(SCHEDULED)
+  startsAt          DateTime
+  endsAt            DateTime
+  teacherId         String?
+  directionId       String?
+  groupId           String?
+  clientName        String?
+  clientPhone       String?
+  priceCents        Int?
+  paymentMethod     PaymentMethod?
+  isPaid            Boolean            @default(false)
+  lightCount        Int                @default(0)
+  comment           String?
+  cancelReason      String?
+  cancelledAt       DateTime?
+  recurrenceKey     String?            @unique
+  teacher           Teacher?           @relation(fields: [teacherId], references: [id])
+  direction         Direction?         @relation(fields: [directionId], references: [id])
+  group             DanceGroup?        @relation(fields: [groupId], references: [id])
+  attendances       Attendance[]
+  teacherAttendance TeacherAttendance?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([startsAt, endsAt, status])
+}
+
+model Attendance {
+  id             String           @id @default(cuid())
+  eventId        String
+  clientId       String
+  subscriptionId String?
+  status         AttendanceStatus
+  deducted       Boolean          @default(false)
+  markedAt       DateTime         @default(now())
+  event          CalendarEvent    @relation(fields: [eventId], references: [id])
+  client         Client           @relation(fields: [clientId], references: [id])
+  subscription   Subscription?    @relation(fields: [subscriptionId], references: [id])
+
+  @@unique([eventId, clientId])
+}
+
+model TeacherAttendance {
+  id        String                  @id @default(cuid())
+  eventId   String                  @unique
+  teacherId String
+  status    TeacherAttendanceStatus
+  markedAt  DateTime                @default(now())
+  event     CalendarEvent           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teacher   Teacher                 @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId, markedAt])
+}
+
+model Payment {
+  id             String          @id @default(cuid())
+  clientId       String?
+  subscriptionId String?
+  teacherId      String?
+  amountCents    Int
+  category       PaymentCategory
+  method         PaymentMethod
+  purpose        String
+  paidAt         DateTime
+  status         PaymentStatus   @default(CONFIRMED)
+  createdById    String
+  cancelledById  String?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  client         Client?         @relation(fields: [clientId], references: [id])
+  subscription   Subscription?   @relation(fields: [subscriptionId], references: [id])
+  teacher        Teacher?        @relation(fields: [teacherId], references: [id])
+  createdBy      User            @relation("PaymentCreator", fields: [createdById], references: [id])
+  cancelledBy    User?           @relation("PaymentCanceller", fields: [cancelledById], references: [id])
+  createdAt      DateTime        @default(now())
+
+  @@index([paidAt, status])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  type        NotificationType
+  title       String
+  message     String
+  link        String?
+  dedupeKey   String
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  recipient   User             @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([recipientId, dedupeKey])
+  @@index([recipientId, readAt, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model ExtraCharge {
+  id          String         @id @default(cuid())
+  title       String
+  eventDate   DateTime
+  amountCents Int
+  comment     String?
+  clients     ClientCharge[]
+  createdAt   DateTime       @default(now())
+}
+
+model ClientCharge {
+  id          String       @id @default(cuid())
+  chargeId    String
+  clientId    String
+  amountCents Int
+  paidCents   Int          @default(0)
+  status      ChargeStatus @default(UNPAID)
+  charge      ExtraCharge  @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  client      Client       @relation(fields: [clientId], references: [id])
+
+  @@unique([chargeId, clientId])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  encrypted Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model TelegramLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  chatId    String
+  success   Boolean
+  error     String?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}

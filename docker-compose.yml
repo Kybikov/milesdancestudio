@@ -1,0 +1,104 @@
+name: miles-dance-studio
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - TZ
+    volumes:
+      - miles_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [miles_internal]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL
+      - JWT_SECRET
+      - SETTINGS_ENCRYPTION_KEY
+      - OWNER_EMAIL
+      - OWNER_PASSWORD
+      - ADMIN_EMAIL
+      - ADMIN_PASSWORD
+      - VAPID_PUBLIC_KEY
+      - VAPID_PRIVATE_KEY
+      - API_PORT=4000
+      - CORS_ORIGIN
+      - COOKIE_DOMAIN
+      - TZ
+    command:
+      [
+        "sh",
+        "-c",
+        "./apps/api/node_modules/.bin/prisma migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/prisma/seed.js && node apps/api/dist/src/server.js",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/ready').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    expose:
+      - "4000"
+    networks: [miles_internal, miles_public]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    expose:
+      - "3000"
+    networks: [miles_public]
+
+volumes:
+  miles_postgres_data:
+    name: miles_dance_studio_postgres
+
+networks:
+  miles_internal:
+    name: miles_dance_studio_internal
+    internal: true
+  miles_public:
+    name: miles_dance_studio_public

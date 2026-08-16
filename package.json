@@ -1,0 +1,16 @@
+{
+  "name": "miles-dance-studio",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @miles/api --filter @miles/web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "pnpm -r format",
+    "db:generate": "pnpm --filter @miles/api db:generate",
+    "db:migrate": "pnpm --filter @miles/api db:migrate",
+    "db:seed": "pnpm --filter @miles/api db:seed"
+  }
+}
