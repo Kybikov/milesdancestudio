@@ -31,6 +31,7 @@ export type SessionUser = {
   email: string
   displayName: string
   avatarPath: string | null
+  mustChangePassword: boolean
   roles: string[]
   permissions: string[]
 }

@@ -13,11 +13,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   ArrowLeft,
+  Banknote,
+  CalendarCheck,
   AtSign as Instagram,
   Pencil,
   Phone,
   Plus,
   Send,
+  UserCheck,
+  UserX,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -61,6 +65,18 @@ type ClientDetailsData = {
     paidCents: number
     status: string
     charge: { title: string; eventDate: string }
+  }[]
+  attendances: {
+    id: string
+    status: string
+    markedAt: string
+    event: {
+      id: string
+      title: string
+      startsAt: string
+      teacher?: { id: string; name: string }
+      direction?: { name: string }
+    }
   }[]
 }
 type Group = { id: string; name: string }
@@ -110,11 +126,20 @@ export function ClientDetails({ id }: { id: string }) {
   const client = query.data
   if (!client)
     return <p className="text-sm text-muted-foreground">Завантаження…</p>
+  const present = client.attendances.filter(
+    (item) => item.status === "PRESENT"
+  ).length
+  const absent = client.attendances.filter(
+    (item) => item.status === "ABSENT"
+  ).length
+  const confirmedPayments = client.payments.filter(
+    (item) => item.status === "CONFIRMED"
+  )
   return (
     <div>
       <PageHeader
         title={`${client.firstName} ${client.lastName}`}
-        description="Повна картка клієнта"
+        description="Контакти, групи, абонементи, оплати та відвідування."
         action={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setEditing(!editing)}>
@@ -128,6 +153,22 @@ export function ClientDetails({ id }: { id: string }) {
           </div>
         }
       />
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ClientMetric icon={UserCheck} label="Відвідано" value={present} />
+        <ClientMetric icon={UserX} label="Пропущено" value={absent} />
+        <ClientMetric
+          icon={CalendarCheck}
+          label="Відвідуваність"
+          value={`${present + absent ? Math.round((present / (present + absent)) * 100) : 0}%`}
+        />
+        <ClientMetric
+          icon={Banknote}
+          label="Сплачено загалом"
+          value={money(
+            confirmedPayments.reduce((sum, item) => sum + item.amountCents, 0)
+          )}
+        />
+      </div>
       {editing && (
         <Card className="miles-card mb-5">
           <CardContent className="p-4">
@@ -293,6 +334,36 @@ export function ClientDetails({ id }: { id: string }) {
           ))}
         </CardContent>
       </Card>
+      <Card className="miles-card mb-5">
+        <CardHeader>
+          <CardTitle className="text-base">Відвідування</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="divide-y">
+            {client.attendances.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{item.event.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {date(item.event.startsAt)}
+                    {item.event.teacher && ` · ${item.event.teacher.name}`}
+                    {item.event.direction && ` · ${item.event.direction.name}`}
+                  </p>
+                </div>
+                <StatusBadge status={item.status} />
+              </div>
+            ))}
+            {!client.attendances.length && (
+              <p className="p-8 text-center text-sm text-muted-foreground">
+                Відвідувань ще немає
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="miles-card">
           <CardHeader>
@@ -347,5 +418,29 @@ export function ClientDetails({ id }: { id: string }) {
         </Card>
       </div>
     </div>
+  )
+}
+
+function ClientMetric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof UserCheck
+  label: string
+  value: string | number
+}) {
+  return (
+    <Card className="miles-card">
+      <CardContent className="flex items-center gap-3 p-4">
+        <div className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
+          <Icon className="size-5" />
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-xl font-semibold">{value}</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

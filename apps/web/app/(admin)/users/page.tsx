@@ -76,7 +76,7 @@ export default function UsersPage() {
     <div>
       <PageHeader
         title="Ролі й доступи"
-        description="Дозволи перевіряються і в інтерфейсі, і на кожному API endpoint."
+        description="Облікові записи, ролі та дозволені дії."
         action={
           <Button onClick={() => setAdding(!adding)}>
             <Plus />

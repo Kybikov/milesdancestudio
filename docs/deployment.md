@@ -17,6 +17,9 @@
 - Production використовує лише внутрішні `expose` порти; локальні bindings з `docker-compose.override.yml` не входять у Coolify deployment.
 - Persistent volume використовується тільки для PostgreSQL.
 - Environment задається в Coolify; `.env` не комітиться.
+- `VAPID_PUBLIC_KEY` і `VAPID_PRIVATE_KEY` генеруються один раз для production та задаються лише в Coolify.
 - HTTPS і автоматичне оновлення сертифікатів забезпечує proxy Coolify.
 
 Перед production запуском створюються OWNER і ADMIN з випадковими паролями. Паролі передаються замовнику окремо й мають бути змінені після першого входу.
+
+Після деплою перевіряються `/health`, `/ready`, вхід, mobile/desktop календар, Kanban, профіль, сповіщення та активність. Push вмикається користувачем у центрі сповіщень, оскільки браузер вимагає явної згоди.

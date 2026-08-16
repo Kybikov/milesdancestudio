@@ -21,13 +21,14 @@ export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const login = useMutation({
+  const login = useMutation<{ mustChangePassword: boolean }>({
     mutationFn: () =>
       api("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       }),
-    onSuccess: () => router.replace("/dashboard"),
+    onSuccess: (result) =>
+      router.replace(result.mustChangePassword ? "/profile" : "/dashboard"),
     onError: (error: Error) => toast.error(error.message),
   })
   return (
@@ -42,14 +43,14 @@ export default function LoginPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/15 to-transparent" />
         <div className="absolute bottom-12 left-12 max-w-lg text-white">
-          <p className="mb-3 text-sm font-medium tracking-[.3em] text-pink-200 uppercase">
-            Miles Dance Studio
+          <p className="text-sm font-medium tracking-[.28em] text-pink-200 uppercase">
+            Miles
           </p>
-          <h1 className="text-5xl leading-tight font-semibold">
-            Ритм студії — в одному місці
+          <h1 className="mt-3 text-5xl leading-tight font-semibold">
+            Dance Studio
           </h1>
-          <p className="mt-4 text-lg text-white/70">
-            Абонементи, заняття, клієнти та фінанси без ручних таблиць.
+          <p className="mt-3 text-base text-white/70">
+            Панель керування студією
           </p>
         </div>
       </section>
@@ -62,7 +63,7 @@ export default function LoginPage() {
             <div>
               <CardTitle className="text-2xl">Вхід до Miles</CardTitle>
               <CardDescription>
-                Введіть дані власниці або адміністратора.
+                Увійдіть за допомогою робочого облікового запису.
               </CardDescription>
             </div>
           </CardHeader>

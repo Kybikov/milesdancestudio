@@ -49,6 +49,9 @@ export default function PaymentsPage() {
   const [clientId, setClientId] = useState("")
   const [category, setCategory] = useState("SUBSCRIPTION")
   const [method, setMethod] = useState("CARD")
+  const [resultStatus, setResultStatus] = useState("CONFIRMED")
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState("")
   const payments = useQuery({
     queryKey: ["payments"],
     queryFn: () => api<Payment[]>("/payments"),
@@ -66,8 +69,14 @@ export default function PaymentsPage() {
       api("/payments", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payments"] })
+      setCancellingId(null)
+      setCancelReason("")
       setAdding(false)
-      toast.success("Оплату підтверджено")
+      toast.success(
+        resultStatus === "CONFIRMED"
+          ? "Оплату підтверджено"
+          : "Невдалу оплату зафіксовано"
+      )
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -112,6 +121,7 @@ export default function PaymentsPage() {
                   amountCents: Number(f.get("amount")) * 100,
                   category,
                   method,
+                  status: resultStatus,
                   purpose: f.get("purpose"),
                   paidAt: new Date(String(f.get("paidAt"))).toISOString(),
                 })
@@ -168,6 +178,20 @@ export default function PaymentsPage() {
               <Field label="Сума, грн">
                 <Input name="amount" type="number" min="1" required />
               </Field>
+              <Field label="Результат">
+                <Select
+                  value={resultStatus}
+                  onValueChange={(value) => value && setResultStatus(value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CONFIRMED">Успішна</SelectItem>
+                    <SelectItem value="FAILED">Неуспішна</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
               <Field label="Призначення">
                 <Input name="purpose" required />
               </Field>
@@ -201,7 +225,7 @@ export default function PaymentsPage() {
             {payments.data?.map((item) => (
               <div
                 key={item.id}
-                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+                className="flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center"
               >
                 <div
                   className={`grid size-10 shrink-0 place-items-center rounded-xl ${item.method === "CASH" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}
@@ -238,17 +262,46 @@ export default function PaymentsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => {
-                        const reason = window.prompt(
-                          "Причина скасування платежу"
-                        )
-                        if (reason) cancel.mutate({ id: item.id, reason })
-                      }}
+                      onClick={() => setCancellingId(item.id)}
                     >
                       <RotateCcw className="size-4 text-rose-500" />
                     </Button>
                   )}
                 </div>
+                {cancellingId === item.id && (
+                  <div className="flex w-full flex-col gap-2 rounded-xl border border-rose-200 bg-rose-50/50 p-3 sm:flex-row sm:items-end">
+                    <Field label="Причина скасування">
+                      <Input
+                        value={cancelReason}
+                        onChange={(event) =>
+                          setCancelReason(event.target.value)
+                        }
+                        className="bg-background"
+                        autoFocus
+                      />
+                    </Field>
+                    <Button
+                      variant="destructive"
+                      disabled={
+                        cancelReason.trim().length < 3 || cancel.isPending
+                      }
+                      onClick={() =>
+                        cancel.mutate({
+                          id: item.id,
+                          reason: cancelReason.trim(),
+                        })
+                      }
+                    >
+                      Скасувати платіж
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setCancellingId(null)}
+                    >
+                      Назад
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

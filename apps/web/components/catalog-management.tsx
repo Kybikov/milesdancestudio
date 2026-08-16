@@ -15,6 +15,11 @@ type Group = { id: string; name: string; level?: string }
 export function CatalogManagement() {
   const qc = useQueryClient()
   const [mode, setMode] = useState<"direction" | "group" | null>(null)
+  const [editing, setEditing] = useState<{
+    kind: "direction" | "group"
+    id: string
+    name: string
+  } | null>(null)
   const directions = useQuery({
     queryKey: ["directions"],
     queryFn: () => api<Direction[]>("/directions"),
@@ -37,6 +42,7 @@ export function CatalogManagement() {
       api("/directions", { method: "POST", body: JSON.stringify({ name }) }),
     onSuccess: () => {
       done()
+      setEditing(null)
       setMode(null)
       toast.success("Напрямок додано")
     },
@@ -47,6 +53,7 @@ export function CatalogManagement() {
       api("/groups", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       done()
+      setEditing(null)
       setMode(null)
       toast.success("Групу додано")
     },
@@ -60,6 +67,7 @@ export function CatalogManagement() {
       }),
     onSuccess: () => {
       done()
+      setEditing(null)
       toast.success("Напрямок оновлено")
     },
   })
@@ -68,6 +76,7 @@ export function CatalogManagement() {
       api(`/groups/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
     onSuccess: () => {
       done()
+      setEditing(null)
       toast.success("Групу оновлено")
     },
   })
@@ -158,17 +167,37 @@ export function CatalogManagement() {
             <Button type="submit">Створити групу</Button>
           </form>
         )}
+        {editing && (
+          <form
+            className="mt-4 flex flex-col gap-2 rounded-xl border bg-muted/30 p-3 sm:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault()
+              const name = String(new FormData(event.currentTarget).get("name"))
+              if (editing.kind === "direction")
+                editDirection.mutate({ id: editing.id, name })
+              else editGroup.mutate({ id: editing.id, name })
+            }}
+          >
+            <Input name="name" defaultValue={editing.name} required autoFocus />
+            <Button type="submit">Зберегти</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setEditing(null)}
+            >
+              Скасувати
+            </Button>
+          </form>
+        )}
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
           {directions.data?.map((item) => (
             <Button
               size="sm"
               variant="secondary"
               key={item.id}
-              onClick={() => {
-                const name = window.prompt("Назва напрямку", item.name)
-                if (name && name !== item.name)
-                  editDirection.mutate({ id: item.id, name })
-              }}
+              onClick={() =>
+                setEditing({ kind: "direction", id: item.id, name: item.name })
+              }
             >
               {item.name}
               <Pencil className="size-3" />
@@ -179,11 +208,9 @@ export function CatalogManagement() {
               size="sm"
               variant="outline"
               key={item.id}
-              onClick={() => {
-                const name = window.prompt("Назва групи", item.name)
-                if (name && name !== item.name)
-                  editGroup.mutate({ id: item.id, name })
-              }}
+              onClick={() =>
+                setEditing({ kind: "group", id: item.id, name: item.name })
+              }
             >
               {item.name}
               <Pencil className="size-3" />

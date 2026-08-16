@@ -32,6 +32,8 @@ services:
       - OWNER_PASSWORD
       - ADMIN_EMAIL
       - ADMIN_PASSWORD
+      - VAPID_PUBLIC_KEY
+      - VAPID_PRIVATE_KEY
       - API_PORT=4000
       - CORS_ORIGIN
       - COOKIE_DOMAIN

@@ -53,6 +53,38 @@ const cancelled = await request(`/events/${event.id}/cancel`, {
   method: "POST",
   body: JSON.stringify({ reason: "Автоматична перевірка скасування" }),
 });
+const teachers = await request("/teachers");
+const teacherOverview = await request(`/teachers/${teachers[0].id}/overview`);
+const clients = await request("/clients");
+const clientDetails = await request(`/clients/${clients[0].id}`);
+const stats = await request(
+  "/statistics?from=2026-01-01T00%3A00%3A00.000Z&to=2031-12-31T23%3A59%3A59.999Z",
+);
+const failedPayment = await request("/payments", {
+  method: "POST",
+  body: JSON.stringify({
+    clientId: clients[0].id,
+    amountCents: 100,
+    category: "OTHER",
+    method: "CARD",
+    status: "FAILED",
+    purpose: `Перевірка відхиленої оплати ${stamp}`,
+    paidAt: new Date().toISOString(),
+  }),
+});
+const notifications = await request("/notifications");
+const activity = await request("/activity");
+const pushConfig = await request("/push/config");
+const subscriptions = await request("/subscriptions");
+const renewable = subscriptions.find(
+  (subscription) =>
+    subscription.product?.lessonsCount && subscription.product?.validityDays,
+);
+if (!renewable) throw new Error("No renewable subscription was seeded");
+const renewed = await request(`/subscriptions/${renewable.id}/renew`, {
+  method: "POST",
+  body: JSON.stringify({ startDate: "2032-01-01T00:00:00.000Z" }),
+});
 
 if (!schedules.length) throw new Error("No regular schedules were seeded");
 if (!generatedEvents.length)
@@ -63,6 +95,28 @@ if (cancelled.status !== "CANCELLED")
   throw new Error("Event cancellation failed");
 if (!cancelled.notification)
   throw new Error("Cancellation notification result is missing");
+if (!teacherOverview.metrics || !Array.isArray(teacherOverview.events))
+  throw new Error("Teacher overview is incomplete");
+if (!Array.isArray(clientDetails.attendances))
+  throw new Error("Client attendance history is missing");
+if (!Array.isArray(stats.teacherStats) || !Array.isArray(stats.clientStats))
+  throw new Error("Detailed statistics are missing");
+if (failedPayment.status !== "FAILED")
+  throw new Error("Failed payment status was not stored");
+if (
+  !notifications.notifications.some(
+    (notification) => notification.type === "PAYMENT_FAILED",
+  )
+)
+  throw new Error("Failed payment notification was not created");
+if (!activity.length) throw new Error("Activity feed is empty");
+if (typeof pushConfig.enabled !== "boolean")
+  throw new Error("Push configuration is unavailable");
+if (
+  renewed.clientId !== renewable.clientId ||
+  renewed.remainingLessons !== renewable.product.lessonsCount
+)
+  throw new Error("Subscription renewal is invalid");
 
 console.log(
   JSON.stringify({
@@ -71,5 +125,12 @@ console.log(
     paidEventCreated: true,
     cancellationStatus: cancelled.status,
     telegram: cancelled.notification,
+    teacherOverview: true,
+    clientAttendanceHistory: true,
+    detailedStatistics: true,
+    failedPaymentNotification: true,
+    activityFeed: true,
+    pushConfig: true,
+    subscriptionRenewal: true,
   }),
 );

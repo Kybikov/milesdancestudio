@@ -2,19 +2,19 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { api, SessionUser } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ActivityDrawer } from "@/components/activity-drawer"
+import { NotificationCenter } from "@/components/notification-center"
+import { ProfileMenu } from "@/components/profile-menu"
 import {
   CalendarDays,
   ChartNoAxesCombined,
-  CircleDollarSign,
   CreditCard,
   LayoutDashboard,
-  LogOut,
   Menu,
   ReceiptText,
   Settings,
@@ -23,7 +23,6 @@ import {
   TicketCheck,
   Users,
   UserRound,
-  History,
 } from "lucide-react"
 import {
   Sheet,
@@ -42,7 +41,6 @@ const items = [
   ["/charges", "Збори", ReceiptText, "charges.write"],
   ["/statistics", "Статистика", ChartNoAxesCombined, "finances.read"],
   ["/users", "Ролі й доступи", ShieldCheck, "users.manage"],
-  ["/audit", "Історія дій", History, "audit.read"],
   ["/settings", "Налаштування", Settings, "settings.manage"],
 ] as const
 
@@ -65,7 +63,8 @@ function Nav({
             onClick={onNavigate}
             className={cn(
               "flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground",
-              pathname === href && "bg-primary/10 text-primary"
+              (pathname === href || pathname.startsWith(`${href}/`)) &&
+                "bg-primary/10 text-primary"
             )}
           >
             <Icon className="size-4" />
@@ -84,10 +83,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     queryFn: () => api<{ user: SessionUser }>("/auth/me"),
     retry: false,
   })
-  const logout = useMutation({
-    mutationFn: () => api("/auth/logout", { method: "POST" }),
-    onSettled: () => router.replace("/"),
-  })
   if (me.isError) {
     router.replace("/")
     return null
@@ -102,6 +97,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     )
   const user = me.data.user
+  if (user.mustChangePassword && pathname !== "/profile") {
+    router.replace("/profile")
+    return null
+  }
   return (
     <div className="min-h-svh lg:p-3">
       <aside className="fixed inset-y-3 left-3 z-30 hidden w-64 flex-col rounded-2xl border bg-card/95 p-3 shadow-sm backdrop-blur lg:flex">
@@ -113,29 +112,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Sparkles className="size-5" />
           </div>
           <div>
-            <p className="font-semibold">Miles Studio</p>
-            <p className="text-xs text-muted-foreground">Dance management</p>
+            <p className="font-semibold">Miles Dance Studio</p>
+            <p className="text-xs text-muted-foreground">Керування студією</p>
           </div>
         </Link>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <Nav user={user} />
-        </div>
-        <div className="mt-3 rounded-xl bg-muted/70 p-2">
-          <div className="flex items-center gap-2">
-            <Avatar className="size-9">
-              <AvatarImage src={user.avatarPath ?? undefined} />
-              <AvatarFallback>{user.displayName.slice(0, 2)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user.displayName}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {user.roles.join(", ")}
-              </p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => logout.mutate()}>
-              <LogOut className="size-4" />
-            </Button>
-          </div>
         </div>
       </aside>
       <div className="lg:pl-[268px]">
@@ -155,14 +137,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Sheet>
             <span className="font-semibold">Miles</span>
           </div>
-          <div className="hidden items-center gap-2 text-sm text-muted-foreground lg:flex">
-            <CircleDollarSign className="size-4 text-primary" />
-            Адмінка студії
+          <div className="hidden items-center gap-2 text-sm lg:flex">
+            <span className="font-medium">
+              {items.find(([href]) => pathname === href)?.[1] ??
+                "Miles Dance Studio"}
+            </span>
           </div>
-          <Avatar className="size-9">
-            <AvatarImage src={user.avatarPath ?? undefined} />
-            <AvatarFallback>{user.displayName.slice(0, 2)}</AvatarFallback>
-          </Avatar>
+          <div className="flex items-center gap-1">
+            <ActivityDrawer />
+            <NotificationCenter />
+            <ProfileMenu user={user} />
+          </div>
         </header>
         <main className="p-4 pb-24 sm:p-6 lg:p-7 lg:pb-8">{children}</main>
       </div>
@@ -176,7 +161,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href={href}
               className={cn(
                 "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] text-muted-foreground",
-                pathname === href && "bg-primary/10 text-primary"
+                (pathname === href || pathname.startsWith(`${href}/`)) &&
+                  "bg-primary/10 text-primary"
               )}
             >
               <Icon className="size-5" />

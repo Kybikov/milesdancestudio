@@ -409,11 +409,76 @@ async function main() {
     }
   }
 
+  const boardSeeded = await db.setting.findUnique({
+    where: { key: "seed.subscriptionBoard.v2" },
+  });
+  if (!boardSeeded) {
+    const expiringSubscription = await db.subscription.findFirst({
+      where: { clientId: clients[2]!.id, productId: product.id },
+    });
+    if (expiringSubscription)
+      await db.subscription.update({
+        where: { id: expiringSubscription.id },
+        data: {
+          endDate: addDays(startOfDay(new Date()), 2),
+          status: "EXPIRING",
+        },
+      });
+    await db.setting.create({
+      data: { key: "seed.subscriptionBoard.v2", value: "applied" },
+    });
+  }
+
   const regularSchedules = await db.regularSchedule.findMany({
     where: { isActive: true },
   });
   for (const schedule of regularSchedules)
     await generateScheduleEvents(schedule.id, 90);
+
+  for (let index = 1; index <= 8; index++) {
+    const startsAt = addDays(startOfDay(new Date()), -index * 3);
+    startsAt.setHours(17, 0, 0, 0);
+    const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
+    const event = await db.calendarEvent.upsert({
+      where: { recurrenceKey: `history:jazz-sofia:${index}` },
+      update: {},
+      create: {
+        recurrenceKey: `history:jazz-sofia:${index}`,
+        title: "Jazz Funk — Софія",
+        type: "GROUP",
+        status: "COMPLETED",
+        startsAt,
+        endsAt,
+        groupId: primaryGroupId,
+        teacherId: teacherMap.get("Софія Якименко")!,
+        directionId: directionMap.get("Jazz Funk & Choreo")!,
+      },
+    });
+    await db.teacherAttendance.upsert({
+      where: { eventId: event.id },
+      update: {},
+      create: {
+        eventId: event.id,
+        teacherId: teacherMap.get("Софія Якименко")!,
+        status: index === 6 ? "ABSENT" : "PRESENT",
+      },
+    });
+    for (let clientIndex = 0; clientIndex < 4; clientIndex++) {
+      const client = clients[clientIndex]!;
+      await db.attendance.upsert({
+        where: {
+          eventId_clientId: { eventId: event.id, clientId: client.id },
+        },
+        update: {},
+        create: {
+          eventId: event.id,
+          clientId: client.id,
+          status: clientIndex === 3 && index % 3 === 0 ? "ABSENT" : "PRESENT",
+          deducted: false,
+        },
+      });
+    }
+  }
 
   const existingPayment = await db.payment.findFirst({
     where: { purpose: "Абонемент Jazz Funk — Дар’я Коваленко" },
@@ -422,6 +487,7 @@ async function main() {
     await db.payment.create({
       data: {
         clientId: clients[0]!.id,
+        teacherId: teacherMap.get("Софія Якименко")!,
         amountCents: 210000,
         category: PaymentCategory.SUBSCRIPTION,
         method: PaymentMethod.CARD,
@@ -429,6 +495,11 @@ async function main() {
         paidAt: addDays(new Date(), -5),
         createdById: admin.id,
       },
+    });
+  } else if (!existingPayment.teacherId) {
+    await db.payment.update({
+      where: { id: existingPayment.id },
+      data: { teacherId: teacherMap.get("Софія Якименко")! },
     });
   }
 

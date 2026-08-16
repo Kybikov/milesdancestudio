@@ -7,6 +7,7 @@ export type SessionUser = {
   email: string;
   displayName: string;
   avatarPath: string | null;
+  mustChangePassword: boolean;
   roles: string[];
   permissions: string[];
 };
@@ -49,6 +50,7 @@ export async function getSessionUser(
     email: user.email,
     displayName: user.displayName,
     avatarPath: user.avatarPath,
+    mustChangePassword: user.mustChangePassword,
     roles: user.roles.map(({ role }) => role.code),
     permissions: [
       ...new Set(

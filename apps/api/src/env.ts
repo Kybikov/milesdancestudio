@@ -14,6 +14,8 @@ const schema = z.object({
   OWNER_PASSWORD: z.string().min(12),
   ADMIN_EMAIL: z.string().email().default("admin@miles.local"),
   ADMIN_PASSWORD: z.string().min(12),
+  VAPID_PUBLIC_KEY: z.string().default(""),
+  VAPID_PRIVATE_KEY: z.string().default(""),
 });
 
 export const env = schema.parse(process.env);

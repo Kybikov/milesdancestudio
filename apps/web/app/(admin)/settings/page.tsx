@@ -98,7 +98,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Налаштування"
-        description="Продукти, тарифи та захищені інтеграції."
+        description="Послуги, ціни та Telegram-бот."
       />
       <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
         <Card className="miles-card">
@@ -185,7 +185,7 @@ export default function SettingsPage() {
               <div>
                 <CardTitle className="text-base">Товари та послуги</CardTitle>
                 <CardDescription>
-                  Ціни й строки не зашиті в код.
+                  Ціна, кількість занять і строк дії.
                 </CardDescription>
               </div>
               <Button size="sm" onClick={() => setAdding(!adding)}>

@@ -13,10 +13,11 @@
 
 ## Секрети
 
-- `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY`, database credentials і deployment credentials живуть тільки в environment.
+- `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY`, VAPID private key, database credentials і deployment credentials живуть тільки в environment.
 - Telegram token шифрується AES-256-GCM; ключ не зберігається в БД.
 - Значення секретів не повертаються через API після збереження.
 - Логи й audit payload очищуються від паролів, токенів і cookies.
+- Push endpoint та ключі браузерної підписки доступні тільки авторизованому користувачу й видаляються після відповіді push-сервісу `404/410`.
 
 ## Аудит
 

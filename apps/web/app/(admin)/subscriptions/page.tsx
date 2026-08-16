@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
@@ -17,7 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, TicketCheck } from "lucide-react"
+import {
+  CalendarClock,
+  CheckCircle2,
+  Plus,
+  RefreshCw,
+  TicketCheck,
+  XCircle,
+} from "lucide-react"
 import { toast } from "sonner"
 
 type Product = {
@@ -52,6 +60,8 @@ export default function SubscriptionsPage() {
   const [teacherId, setTeacherId] = useState("")
   const [directionId, setDirectionId] = useState("")
   const [method, setMethod] = useState("CARD")
+  const [renewingId, setRenewingId] = useState<string | null>(null)
+  const [renewalMethod, setRenewalMethod] = useState("CARD")
   const subscriptions = useQuery({
     queryKey: ["subscriptions"],
     queryFn: () => api<Subscription[]>("/subscriptions"),
@@ -82,11 +92,60 @@ export default function SubscriptionsPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const renew = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) =>
+      api(`/subscriptions/${id}/renew`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscriptions"] })
+      qc.invalidateQueries({ queryKey: ["notifications"] })
+      setRenewingId(null)
+      toast.success("Абонемент продовжено")
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const columns = [
+    {
+      id: "expiring",
+      title: "Завершуються",
+      icon: CalendarClock,
+      tone: "text-amber-600 bg-amber-50",
+      items:
+        subscriptions.data?.filter((item) => item.status === "EXPIRING") ?? [],
+    },
+    {
+      id: "active",
+      title: "Активні",
+      icon: CheckCircle2,
+      tone: "text-emerald-600 bg-emerald-50",
+      items:
+        subscriptions.data?.filter((item) => item.status === "ACTIVE") ?? [],
+    },
+    {
+      id: "used",
+      title: "Використані",
+      icon: TicketCheck,
+      tone: "text-sky-600 bg-sky-50",
+      items: subscriptions.data?.filter((item) => item.status === "USED") ?? [],
+    },
+    {
+      id: "closed",
+      title: "Завершені",
+      icon: XCircle,
+      tone: "text-rose-600 bg-rose-50",
+      items:
+        subscriptions.data?.filter((item) =>
+          ["EXPIRED", "CANCELLED"].includes(item.status)
+        ) ?? [],
+    },
+  ]
   return (
     <div>
       <PageHeader
         title="Абонементи"
-        description="Залишки, строки, спільні напрямки та згорання."
+        description="Статус кожного абонемента, залишок занять і дата завершення."
         action={
           <Button onClick={() => setAdding(!adding)}>
             <Plus />
@@ -223,56 +282,187 @@ export default function SubscriptionsPage() {
           </CardContent>
         </Card>
       )}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {subscriptions.data?.map((item) => (
-          <Card key={item.id} className="miles-card">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold">
-                    {item.client.firstName} {item.client.lastName}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {item.productName}
-                  </p>
-                </div>
-                <StatusBadge status={item.status} />
-              </div>
-              <div className="my-4 rounded-xl bg-muted/60 p-4">
-                <p className="text-xs text-muted-foreground">Залишилося</p>
-                <p className="text-3xl font-semibold">
-                  {item.remainingLessons}
-                  <span className="text-base font-normal text-muted-foreground">
-                    {" "}
-                    / {item.totalLessons}
-                  </span>
-                </p>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-border">
+      <div className="-mx-4 overflow-x-auto px-4 pb-3 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
+        <div className="grid min-w-max auto-cols-[minmax(280px,85vw)] grid-flow-col items-start gap-4 lg:min-w-[1120px] lg:auto-cols-auto lg:grid-flow-row lg:grid-cols-4">
+          {columns.map((column) => (
+            <section
+              key={column.id}
+              className="rounded-2xl border bg-muted/25 p-3"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
                   <div
-                    className="h-full rounded-full bg-primary"
-                    style={{
-                      width: `${Math.max(0, (item.remainingLessons / item.totalLessons) * 100)}%`,
-                    }}
-                  />
+                    className={`grid size-8 place-items-center rounded-lg ${column.tone}`}
+                  >
+                    <column.icon className="size-4" />
+                  </div>
+                  <h2 className="text-sm font-semibold">{column.title}</h2>
                 </div>
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>
-                  {date(item.startDate)} — {date(item.endDate)}
+                <span className="rounded-full border bg-background px-2 py-0.5 text-xs">
+                  {column.items.length}
                 </span>
-                <span>{money(item.priceCents)}</span>
               </div>
-              {item.burnedLessons > 0 && (
-                <p className="mt-2 text-xs text-rose-600">
-                  Не використано та згоріло: {item.burnedLessons}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+              <div className="space-y-3">
+                {column.items.map((item) => (
+                  <Card key={item.id} className="border bg-card shadow-sm">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <Link
+                            href={`/clients/${item.client.id}`}
+                            className="font-semibold hover:text-primary"
+                          >
+                            {item.client.firstName} {item.client.lastName}
+                          </Link>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {item.productName}
+                          </p>
+                        </div>
+                        <StatusBadge status={item.status} />
+                      </div>
+                      <div className="my-3 rounded-xl bg-muted/60 p-3">
+                        <div className="flex items-end justify-between">
+                          <p className="text-2xl font-semibold">
+                            {item.remainingLessons}
+                            <span className="text-sm font-normal text-muted-foreground">
+                              {" "}
+                              / {item.totalLessons}
+                            </span>
+                          </p>
+                          <span className="text-xs text-muted-foreground">
+                            занять
+                          </span>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-border">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{
+                              width: `${Math.max(0, (item.remainingLessons / item.totalLessons) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        До {date(item.endDate)} · {daysUntil(item.endDate)}
+                      </p>
+                      <p className="mt-1 text-xs font-medium">
+                        {money(item.priceCents)}
+                      </p>
+                      {item.burnedLessons > 0 && (
+                        <p className="mt-2 text-xs text-rose-600">
+                          Згоріло занять: {item.burnedLessons}
+                        </p>
+                      )}
+                      {item.status !== "ACTIVE" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-3 w-full"
+                          onClick={() =>
+                            setRenewingId(
+                              renewingId === item.id ? null : item.id
+                            )
+                          }
+                        >
+                          <RefreshCw /> Продовжити
+                        </Button>
+                      )}
+                      {renewingId === item.id && (
+                        <form
+                          className="mt-3 space-y-3 rounded-xl border bg-muted/40 p-3"
+                          onSubmit={(event) => {
+                            event.preventDefault()
+                            const form = new FormData(event.currentTarget)
+                            const paid = form.get("paid") === "on"
+                            renew.mutate({
+                              id: item.id,
+                              data: {
+                                startDate: new Date(
+                                  String(form.get("startDate"))
+                                ).toISOString(),
+                                payment: paid
+                                  ? {
+                                      method: renewalMethod,
+                                      amountCents: item.priceCents,
+                                    }
+                                  : undefined,
+                              },
+                            })
+                          }}
+                        >
+                          <Field label="Початок нового абонемента">
+                            <Input
+                              name="startDate"
+                              type="date"
+                              defaultValue={new Date()
+                                .toISOString()
+                                .slice(0, 10)}
+                              required
+                            />
+                          </Field>
+                          <label className="flex items-center gap-2 text-xs">
+                            <input type="checkbox" name="paid" defaultChecked />
+                            Оплату отримано
+                          </label>
+                          <Select
+                            value={renewalMethod}
+                            onValueChange={(value) =>
+                              value && setRenewalMethod(value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="CARD">
+                                Картка / термінал
+                              </SelectItem>
+                              <SelectItem value="CASH">Готівка</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              type="submit"
+                              disabled={renew.isPending}
+                            >
+                              Підтвердити
+                            </Button>
+                            <Button
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setRenewingId(null)}
+                            >
+                              Назад
+                            </Button>
+                          </div>
+                        </form>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+                {!column.items.length && (
+                  <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">
+                    Немає абонементів
+                  </div>
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   )
+}
+
+function daysUntil(value: string) {
+  const diff = Math.ceil(
+    (new Date(value).getTime() - new Date().setHours(0, 0, 0, 0)) / 86_400_000
+  )
+  if (diff < 0) return `${Math.abs(diff)} дн. тому`
+  if (diff === 0) return "сьогодні"
+  return `${diff} дн.`
 }
 function Field({
   label,

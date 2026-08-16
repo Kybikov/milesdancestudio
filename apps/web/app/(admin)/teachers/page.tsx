@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
@@ -34,6 +35,7 @@ type Teacher = {
 export default function TeachersPage() {
   const qc = useQueryClient()
   const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const teachers = useQuery({
     queryKey: ["teachers"],
     queryFn: () => api<Teacher[]>("/teachers"),
@@ -47,6 +49,7 @@ export default function TeachersPage() {
       api("/teachers", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["teachers"] })
+      setEditingId(null)
       setAdding(false)
       toast.success("Викладача додано")
     },
@@ -154,7 +157,14 @@ export default function TeachersPage() {
                     .join("")}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <CardTitle className="text-lg">{teacher.name}</CardTitle>
+                  <CardTitle className="text-lg">
+                    <Link
+                      href={`/teachers/${teacher.id}`}
+                      className="hover:text-primary"
+                    >
+                      {teacher.name}
+                    </Link>
+                  </CardTitle>
                   <p className="text-xs text-muted-foreground">
                     {teacher.phone || teacher.instagram || "Контакт не вказано"}
                   </p>
@@ -162,22 +172,60 @@ export default function TeachersPage() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => {
-                    const name = window.prompt("Ім’я викладача", teacher.name)
-                    if (!name) return
-                    const phone = window.prompt("Телефон", teacher.phone ?? "")
-                    if (phone !== null)
-                      update.mutate({
-                        id: teacher.id,
-                        data: { name, phone: phone || null },
-                      })
-                  }}
+                  onClick={() =>
+                    setEditingId(editingId === teacher.id ? null : teacher.id)
+                  }
                 >
                   <Pencil className="size-4" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
+              {editingId === teacher.id && (
+                <form
+                  className="mb-4 space-y-3 rounded-xl border bg-muted/30 p-3"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    const form = new FormData(event.currentTarget)
+                    update.mutate({
+                      id: teacher.id,
+                      data: {
+                        name: form.get("name"),
+                        phone: form.get("phone") || null,
+                        instagram: form.get("instagram") || null,
+                      },
+                    })
+                  }}
+                >
+                  <Field label="Ім’я">
+                    <Input name="name" defaultValue={teacher.name} required />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Телефон">
+                      <Input name="phone" defaultValue={teacher.phone} />
+                    </Field>
+                    <Field label="Instagram">
+                      <Input
+                        name="instagram"
+                        defaultValue={teacher.instagram}
+                      />
+                    </Field>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" type="submit">
+                      Зберегти
+                    </Button>
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setEditingId(null)}
+                    >
+                      Скасувати
+                    </Button>
+                  </div>
+                </form>
+              )}
               <div className="mb-4 flex flex-wrap gap-1">
                 {teacher.directions.map(({ direction }) => (
                   <Badge variant="secondary" key={direction.id}>

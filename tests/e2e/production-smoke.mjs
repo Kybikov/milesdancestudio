@@ -20,9 +20,10 @@ async function verify(viewport, name, storageState) {
     if (message.type() === "error") errors.push(message.text());
   });
   page.on("pageerror", (error) => errors.push(error.message));
-  const dashboardResponse = page.waitForResponse((response) =>
-    new URL(response.url()).host === apiURL.host &&
-    new URL(response.url()).pathname === "/dashboard"
+  const dashboardResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).host === apiURL.host &&
+      new URL(response.url()).pathname === "/dashboard",
   );
   if (storageState) {
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded" });
@@ -38,16 +39,36 @@ async function verify(viewport, name, storageState) {
     throw new Error(`Dashboard API failed: ${dashboard.status()}`);
   await page.getByRole("heading", { name: "Сьогодні у студії" }).waitFor();
   await page.getByRole("heading", { name: "Викладачі" }).waitFor();
-  await page
-    .locator("section")
-    .first()
-    .getByText("Олександра Майлс")
-    .waitFor();
+  await page.locator("section").first().getByText("Олександра Майлс").waitFor();
   if (screenshotDir)
     await page.screenshot({
       path: join(screenshotDir, `${name}-dashboard.png`),
       fullPage: true,
     });
+  const notificationTrigger = page.getByRole("button", {
+    name: "Сповіщення",
+  });
+  await notificationTrigger.click();
+  await page.locator('[role="menu"]').waitFor();
+  await page.waitForTimeout(250);
+  if (screenshotDir)
+    await page.screenshot({
+      path: join(screenshotDir, `${name}-notifications.png`),
+    });
+  await page.keyboard.press("Escape");
+  await page.locator('[role="menu"]').waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "Активність" }).click();
+  await page.getByRole("heading", { name: "Активність команди" }).waitFor();
+  await page.waitForTimeout(250);
+  if (screenshotDir)
+    await page.screenshot({
+      path: join(screenshotDir, `${name}-activity.png`),
+    });
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Профіль користувача" }).click();
+  await page.getByText(email, { exact: true }).waitFor();
+  await page.getByRole("menuitem", { name: "Особистий профіль" }).waitFor();
+  await page.keyboard.press("Escape");
   await page.goto(`${baseURL}/clients`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Клієнти" }).waitFor();
   if (screenshotDir)
@@ -56,17 +77,39 @@ async function verify(viewport, name, storageState) {
       fullPage: true,
     });
   await page.goto(`${baseURL}/calendar`, { waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: "Календар залу" }).waitFor();
+  await page.getByRole("heading", { name: "Календар", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Місяць", exact: true }).waitFor();
+  if (screenshotDir)
+    await page.screenshot({
+      path: join(screenshotDir, `${name}-calendar-month.png`),
+      fullPage: true,
+    });
   await page.getByRole("button", { name: "День", exact: true }).click();
-  await page.getByText("Вільно:").waitFor();
+  await page.getByText("Вільні години:").waitFor();
   if (screenshotDir)
     await page.screenshot({
       path: join(screenshotDir, `${name}-calendar.png`),
       fullPage: true,
     });
+  await page.goto(`${baseURL}/subscriptions`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Абонементи" }).waitFor();
+  await page.getByRole("heading", { name: "Завершуються" }).waitFor();
+  await page.getByRole("heading", { name: "Активні" }).waitFor();
+  if (screenshotDir)
+    await page.screenshot({
+      path: join(screenshotDir, `${name}-subscriptions.png`),
+      fullPage: true,
+    });
+  await page.goto(`${baseURL}/profile`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Особистий профіль" }).waitFor();
+  if (screenshotDir)
+    await page.screenshot({
+      path: join(screenshotDir, `${name}-profile.png`),
+      fullPage: true,
+    });
   await page.goto(`${baseURL}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Налаштування" }).waitFor();
-  await page.getByText("Telegram-бот").waitFor();
+  await page.getByText("Telegram-бот", { exact: true }).waitFor();
   if (errors.length)
     throw new Error(`${name} browser errors: ${errors.join(" | ")}`);
   const nextStorageState = await context.storageState();
