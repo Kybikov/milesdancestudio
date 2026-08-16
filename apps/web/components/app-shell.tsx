@@ -13,7 +13,6 @@ import { ProfileMenu } from "@/components/profile-menu"
 import {
   CalendarDays,
   BookOpen,
-  ChartNoAxesCombined,
   CreditCard,
   LayoutDashboard,
   Menu,
@@ -41,7 +40,6 @@ const items = [
   ["/subscriptions", "Абонементи", TicketCheck, "subscriptions.read"],
   ["/payments", "Оплати", CreditCard, "payments.create"],
   ["/charges", "Збори", ReceiptText, "charges.write"],
-  ["/statistics", "Статистика", ChartNoAxesCombined, "finances.read"],
   ["/users", "Ролі й доступи", ShieldCheck, "users.manage"],
   ["/settings", "Налаштування", Settings, "settings.manage"],
 ] as const
@@ -147,20 +145,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {currentItem?.[1] ?? "Miles Dance Studio"}
             </span>
           </div>
-          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-2 xl:flex">
+          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center xl:flex">
             <span className="rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
               {new Intl.DateTimeFormat("uk-UA", {
                 weekday: "short",
                 day: "numeric",
                 month: "long",
               }).format(new Date())}
-            </span>
-            <span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
-              {user.roles.includes("OWNER")
-                ? "Власниця"
-                : user.roles.includes("TEACHER")
-                  ? "Викладач"
-                  : "Адміністратор"}
             </span>
           </div>
           <div className="flex items-center gap-1">

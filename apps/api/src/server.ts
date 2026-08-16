@@ -490,6 +490,137 @@ app.get(
       orderBy: { name: "asc" },
     }),
 );
+app.get(
+  "/groups/:id/overview",
+  { preHandler: app.requirePermission("teachers.write") },
+  async (request) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const query = z
+      .object({
+        from: z.coerce.date().optional(),
+        to: z.coerce.date().optional(),
+      })
+      .parse(request.query);
+    const from =
+      query.from ?? new Date(new Date().setDate(new Date().getDate() - 90));
+    const to = query.to ?? new Date();
+    const group = await db.danceGroup.findUniqueOrThrow({
+      where: { id },
+      include: {
+        teacher: true,
+        direction: true,
+        members: {
+          include: {
+            client: {
+              include: {
+                subscriptions: {
+                  where: { status: { in: ["ACTIVE", "EXPIRING"] } },
+                },
+              },
+            },
+          },
+        },
+        schedules: true,
+      },
+    });
+    const clientIds = group.members.map((member) => member.clientId);
+    const [events, payments] = await Promise.all([
+      db.calendarEvent.findMany({
+        where: { groupId: id, startsAt: { gte: from, lte: to } },
+        include: { attendances: true },
+        orderBy: { startsAt: "desc" },
+      }),
+      db.payment.findMany({
+        where: {
+          clientId: { in: clientIds },
+          status: "CONFIRMED",
+          paidAt: { gte: from, lte: to },
+        },
+        select: { amountCents: true, paidAt: true },
+      }),
+    ]);
+    const completed = events.filter((event) => event.status === "COMPLETED");
+    const present = events.reduce(
+      (sum, event) =>
+        sum +
+        event.attendances.filter((attendance) => attendance.status === "PRESENT")
+          .length,
+      0,
+    );
+    const absent = events.reduce(
+      (sum, event) =>
+        sum +
+        event.attendances.filter((attendance) => attendance.status === "ABSENT")
+          .length,
+      0,
+    );
+    const trendMap = new Map<
+      string,
+      {
+        date: string;
+        events: number;
+        present: number;
+        absent: number;
+        revenueCents: number;
+      }
+    >();
+    const ensureDay = (value: Date) => {
+      const date = value.toISOString().slice(0, 10);
+      const current = trendMap.get(date) ?? {
+        date,
+        events: 0,
+        present: 0,
+        absent: 0,
+        revenueCents: 0,
+      };
+      trendMap.set(date, current);
+      return current;
+    };
+    for (const event of events) {
+      const day = ensureDay(event.startsAt);
+      if (event.status !== "CANCELLED") day.events += 1;
+      day.present += event.attendances.filter(
+        (attendance) => attendance.status === "PRESENT",
+      ).length;
+      day.absent += event.attendances.filter(
+        (attendance) => attendance.status === "ABSENT",
+      ).length;
+    }
+    for (const payment of payments)
+      ensureDay(payment.paidAt).revenueCents += payment.amountCents;
+    const revenueCents = payments.reduce(
+      (sum, payment) => sum + payment.amountCents,
+      0,
+    );
+    return {
+      group,
+      range: { from, to },
+      metrics: {
+        students: group.members.length,
+        activeSubscriptions: group.members.reduce(
+          (sum, member) => sum + member.client.subscriptions.length,
+          0,
+        ),
+        events: events.filter((event) => event.status !== "CANCELLED").length,
+        completed: completed.length,
+        cancelled: events.filter((event) => event.status === "CANCELLED").length,
+        present,
+        absent,
+        attendanceRate:
+          present + absent ? Math.round((present / (present + absent)) * 100) : 0,
+        revenueCents,
+        payments: payments.length,
+        revenuePerStudentCents: group.members.length
+          ? Math.round(revenueCents / group.members.length)
+          : 0,
+      },
+      trend: [...trendMap.values()].sort((a, b) =>
+        a.date.localeCompare(b.date),
+      ),
+      events: events.slice(0, 30),
+    };
+  },
+);
 app.post(
   "/groups",
   { preHandler: app.requirePermission("teachers.write") },

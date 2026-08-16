@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react"
 import { toast } from "sonner"
+import { StudioStatistics } from "../statistics/page"
 
 type Teacher = {
   id: string
@@ -211,7 +212,7 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
-      <section>
+      <section className="mb-10">
         <h2 className="mb-3 text-lg font-semibold">Заняття та відвідування</h2>
         <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
           <div className="space-y-2">
@@ -325,6 +326,11 @@ export default function DashboardPage() {
           </Card>
         </div>
       </section>
+      {me.data?.user.permissions.includes("finances.read") && (
+        <section className="border-t pt-8">
+          <StudioStatistics />
+        </section>
+      )}
     </div>
   )
 }

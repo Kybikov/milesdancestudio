@@ -15,7 +15,6 @@ const routes = [
   "/subscriptions",
   "/payments",
   "/charges",
-  "/statistics",
   "/users",
   "/settings",
   "/profile",
@@ -68,7 +67,12 @@ for (const viewport of [
     .locator('a[href^="/clients/"]')
     .first()
     .getAttribute("href");
-  for (const route of [firstTeacher, firstClient].filter(Boolean)) {
+  await page.goto(`${baseURL}/courses`, { waitUntil: "networkidle" });
+  const firstCourse = await page
+    .locator('a[href^="/courses/"]')
+    .first()
+    .getAttribute("href");
+  for (const route of [firstTeacher, firstClient, firstCourse].filter(Boolean)) {
     await page.goto(`${baseURL}${route}`, { waitUntil: "networkidle" });
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

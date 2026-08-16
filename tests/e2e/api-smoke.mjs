@@ -55,6 +55,8 @@ const cancelled = await request(`/events/${event.id}/cancel`, {
 });
 const teachers = await request("/teachers");
 const teacherOverview = await request(`/teachers/${teachers[0].id}/overview`);
+const groups = await request("/groups");
+const groupOverview = await request(`/groups/${groups[0].id}/overview`);
 const clients = await request("/clients");
 const clientDetails = await request(`/clients/${clients[0].id}`);
 const stats = await request(
@@ -97,6 +99,8 @@ if (!cancelled.notification)
   throw new Error("Cancellation notification result is missing");
 if (!teacherOverview.metrics || !Array.isArray(teacherOverview.events))
   throw new Error("Teacher overview is incomplete");
+if (!groupOverview.metrics || !Array.isArray(groupOverview.trend))
+  throw new Error("Course overview is incomplete");
 if (!Array.isArray(clientDetails.attendances))
   throw new Error("Client attendance history is missing");
 if (!Array.isArray(stats.teacherStats) || !Array.isArray(stats.clientStats))
@@ -126,6 +130,7 @@ console.log(
     cancellationStatus: cancelled.status,
     telegram: cancelled.notification,
     teacherOverview: true,
+    groupOverview: true,
     clientAttendanceHistory: true,
     detailedStatistics: true,
     failedPaymentNotification: true,

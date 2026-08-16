@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { money } from "@/lib/format"
@@ -81,7 +82,7 @@ const categoryNames: Record<string, string> = {
   OTHER: "Інше",
 }
 
-export default function StatisticsPage() {
+export function StudioStatistics() {
   const initialFrom = new Date()
   initialFrom.setDate(initialFrom.getDate() - 30)
   const [from, setFrom] = useState(initialFrom.toISOString().slice(0, 10))
@@ -342,6 +343,12 @@ export default function StatisticsPage() {
       </Card>
     </div>
   )
+}
+
+export default function StatisticsPage() {
+  const router = useRouter()
+  useEffect(() => router.replace("/dashboard"), [router])
+  return null
 }
 
 function Metric({

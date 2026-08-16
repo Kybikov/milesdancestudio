@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { PageHeader } from "@/components/page-header"
@@ -10,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { BookOpen, Pencil, Plus, Users } from "lucide-react"
+import { ArrowRight, BookOpen, Plus, Users } from "lucide-react"
 import { toast } from "sonner"
 
 type Direction = { id: string; name: string }
@@ -30,7 +31,6 @@ type Course = {
 export default function CoursesPage() {
   const qc = useQueryClient()
   const [adding, setAdding] = useState(false)
-  const [editing, setEditing] = useState<Course | null>(null)
   const courses = useQuery({
     queryKey: ["groups"],
     queryFn: () => api<Course[]>("/groups"),
@@ -47,7 +47,6 @@ export default function CoursesPage() {
     qc.invalidateQueries({ queryKey: ["groups"] })
     qc.invalidateQueries({ queryKey: ["teachers"] })
     setAdding(false)
-    setEditing(null)
   }
   const create = useMutation({
     mutationFn: (data: object) =>
@@ -58,16 +57,7 @@ export default function CoursesPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
-  const update = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: object }) =>
-      api(`/groups/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => {
-      done()
-      toast.success("Курс оновлено")
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const submit = (event: React.FormEvent<HTMLFormElement>, id?: string) => {
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const data = {
@@ -77,8 +67,7 @@ export default function CoursesPage() {
       teacherId: form.get("teacherId"),
       directionId: form.get("directionId"),
     }
-    if (id) update.mutate({ id, data })
-    else create.mutate(data)
+    create.mutate(data)
   }
   return (
     <div>
@@ -91,28 +80,28 @@ export default function CoursesPage() {
           </Button>
         }
       />
-      {(adding || editing) && (
+      {adding && (
         <Card className="miles-card mb-5">
           <CardHeader>
             <CardTitle className="text-base">
-              {editing ? "Редагування курсу" : "Новий курс"}
+              Новий курс
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form
               className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-              onSubmit={(event) => submit(event, editing?.id)}
+              onSubmit={submit}
             >
               <Field label="Назва">
-                <Input name="name" defaultValue={editing?.name} required />
+                <Input name="name" required />
               </Field>
               <Field label="Рівень">
-                <Input name="level" defaultValue={editing?.level} />
+                <Input name="level" />
               </Field>
               <Field label="Напрямок">
                 <select
                   name="directionId"
-                  defaultValue={editing?.direction.id}
+                  defaultValue=""
                   className="h-10 w-full rounded-xl border bg-background px-3 text-sm"
                   required
                 >
@@ -125,7 +114,7 @@ export default function CoursesPage() {
               <Field label="Викладач">
                 <select
                   name="teacherId"
-                  defaultValue={editing?.teacher.id}
+                  defaultValue=""
                   className="h-10 w-full rounded-xl border bg-background px-3 text-sm"
                   required
                 >
@@ -139,7 +128,6 @@ export default function CoursesPage() {
                 <Field label="Опис і призначення курсу">
                   <Textarea
                     name="description"
-                    defaultValue={editing?.description}
                     placeholder="Для кого курс, що вивчають і який очікуваний результат"
                     rows={4}
                   />
@@ -150,7 +138,7 @@ export default function CoursesPage() {
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => { setAdding(false); setEditing(null) }}
+                  onClick={() => setAdding(false)}
                 >
                   Скасувати
                 </Button>
@@ -169,11 +157,15 @@ export default function CoursesPage() {
                   <BookOpen className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <CardTitle className="text-lg">{course.name}</CardTitle>
+                  <CardTitle className="text-lg">
+                    <Link href={`/courses/${course.id}`} className="hover:text-primary">
+                      {course.name}
+                    </Link>
+                  </CardTitle>
                   <p className="mt-1 text-sm text-muted-foreground">{course.teacher.name}</p>
                 </div>
-                <Button size="icon" variant="ghost" onClick={() => setEditing(course)}>
-                  <Pencil className="size-4" />
+                <Button size="icon" variant="ghost" render={<Link href={`/courses/${course.id}`} />}>
+                  <ArrowRight className="size-4" />
                 </Button>
               </div>
             </CardHeader>
@@ -190,6 +182,9 @@ export default function CoursesPage() {
                 <strong>{course.members.length}</strong>
                 <span className="text-muted-foreground">учнів навчаються</span>
               </div>
+              <Button className="mt-4 w-full" variant="outline" render={<Link href={`/courses/${course.id}`} />}>
+                Деталі та статистика <ArrowRight />
+              </Button>
             </CardContent>
           </Card>
         ))}
